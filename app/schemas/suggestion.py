@@ -1,3 +1,4 @@
+import uuid
 from typing import Optional
 from pydantic import BaseModel
 from datetime import datetime
@@ -8,8 +9,8 @@ class SuggestionCreate(BaseModel):
     age_range: Optional[str] = None
     topic_wanted: str
     feedback: Optional[str] = None
-    persona_id: Optional[int] = None
-    zone_id: Optional[int] = None
+    persona_id: Optional[uuid.UUID] = None
+    zone_id: Optional[uuid.UUID] = None
     screen_context: Optional[str] = "Explore"
 
 
@@ -19,14 +20,14 @@ class SuggestionStatusUpdate(BaseModel):
 
 
 class SuggestionResponse(BaseModel):
-    id: int
+    id: uuid.UUID
     visitor_name: Optional[str] = None
     age_range: Optional[str] = None
     topic_wanted: str
     feedback: Optional[str] = None
-    persona_id: Optional[int] = None
+    persona_id: Optional[uuid.UUID] = None
     persona_name: Optional[str] = None
-    zone_id: Optional[int] = None
+    zone_id: Optional[uuid.UUID] = None
     zone_name: Optional[str] = None
     screen_context: str
     status: str

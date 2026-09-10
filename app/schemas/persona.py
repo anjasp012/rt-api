@@ -1,3 +1,4 @@
+import uuid
 from typing import Optional
 from pydantic import BaseModel
 from datetime import datetime
@@ -7,9 +8,8 @@ class PersonaBase(BaseModel):
     name: str
     slug: str
     tagline: str
-    icon_name: Optional[str] = None
-    avatar_url: Optional[str] = None
-    order_index: int = 0
+    icon_url: Optional[str] = None
+
     is_active: bool = True
 
 
@@ -21,14 +21,13 @@ class PersonaUpdate(BaseModel):
     name: Optional[str] = None
     slug: Optional[str] = None
     tagline: Optional[str] = None
-    icon_name: Optional[str] = None
-    avatar_url: Optional[str] = None
-    order_index: Optional[int] = None
+    icon_url: Optional[str] = None
+
     is_active: Optional[bool] = None
 
 
 class PersonaResponse(PersonaBase):
-    id: int
+    id: uuid.UUID
     created_at: Optional[datetime] = None
 
     class Config:

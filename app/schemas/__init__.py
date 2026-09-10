@@ -12,7 +12,6 @@ from app.schemas.user import (
 )
 from app.schemas.persona import PersonaCreate, PersonaUpdate, PersonaResponse
 from app.schemas.zone import ZoneCreate, ZoneUpdate, ZoneResponse
-from app.schemas.research_center import ResearchCenterCreate, ResearchCenterUpdate, ResearchCenterResponse
 from app.schemas.innovation import (
     InnovationCreate,
     InnovationUpdate,
@@ -21,7 +20,7 @@ from app.schemas.innovation import (
     RelevanceMappingItem,
 )
 from app.schemas.suggestion import SuggestionCreate, SuggestionStatusUpdate, SuggestionResponse
-from app.schemas.admin import BulkStatusUpdate, BulkDeleteRequest, SettingsUpdate, DashboardAnalyticsResponse
+from app.schemas.admin import BulkStatusUpdate, BulkDeleteRequest, DashboardAnalyticsResponse
 
 __all__ = [
     "LoginRequest",
@@ -38,9 +37,6 @@ __all__ = [
     "ZoneCreate",
     "ZoneUpdate",
     "ZoneResponse",
-    "ResearchCenterCreate",
-    "ResearchCenterUpdate",
-    "ResearchCenterResponse",
     "InnovationCreate",
     "InnovationUpdate",
     "InnovationResponse",
@@ -51,6 +47,5 @@ __all__ = [
     "SuggestionResponse",
     "BulkStatusUpdate",
     "BulkDeleteRequest",
-    "SettingsUpdate",
     "DashboardAnalyticsResponse",
 ]

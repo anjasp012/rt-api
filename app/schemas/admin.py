@@ -1,19 +1,18 @@
+import uuid
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 
 
 class BulkStatusUpdate(BaseModel):
-    ids: List[int]
+    ids: List[uuid.UUID]
     status: str
 
 
 class BulkDeleteRequest(BaseModel):
-    ids: List[int]
+    ids: List[uuid.UUID]
 
 
-class SettingsUpdate(BaseModel):
-    frontend_display_limit: Optional[int] = 50
-    allow_visitor_submissions: Optional[bool] = True
+
 
 
 class DashboardAnalyticsResponse(BaseModel):

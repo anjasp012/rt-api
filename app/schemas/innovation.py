@@ -1,27 +1,26 @@
+import uuid
 import math
 from typing import Optional, List
 from pydantic import BaseModel
 from datetime import datetime
 from app.schemas.zone import ZoneResponse
-from app.schemas.research_center import ResearchCenterResponse
+from app.schemas.persona import PersonaResponse
 
 
 class InnovationBase(BaseModel):
-    zone_id: int
-    research_center_id: Optional[int] = None
+    zone_id: uuid.UUID
+    persona_id: uuid.UUID
     title: str
     slug: str
-    category_tag: str
     trl: int = 1
     short_description: str
     summary: str
     impact: str
     thumbnail_url: Optional[str] = None
-    download_url: Optional[str] = None
-    qr_code_data: Optional[str] = None
+    research_center: Optional[str] = None
+    implementation_potential: Optional[List[str]] = []
+    relevant_tags: Optional[List[str]] = []
     media_gallery: Optional[List[str]] = []
-    order_priority: int = 0
-    is_featured: bool = False
     is_active: bool = True
 
 
@@ -30,55 +29,53 @@ class InnovationCreate(InnovationBase):
 
 
 class InnovationUpdate(BaseModel):
-    zone_id: Optional[int] = None
-    research_center_id: Optional[int] = None
+    zone_id: Optional[uuid.UUID] = None
+    persona_id: Optional[uuid.UUID] = None
     title: Optional[str] = None
     slug: Optional[str] = None
-    category_tag: Optional[str] = None
     trl: Optional[int] = None
     short_description: Optional[str] = None
     summary: Optional[str] = None
     impact: Optional[str] = None
     thumbnail_url: Optional[str] = None
-    download_url: Optional[str] = None
-    qr_code_data: Optional[str] = None
+    research_center: Optional[str] = None
+    implementation_potential: Optional[List[str]] = None
+    relevant_tags: Optional[List[str]] = None
     media_gallery: Optional[List[str]] = None
-    order_priority: Optional[int] = None
-    is_featured: Optional[bool] = None
     is_active: Optional[bool] = None
 
 
 class RelevanceMappingItem(BaseModel):
-    persona_id: int
+    persona_id: uuid.UUID
     relevance_score: int
     custom_impact: Optional[str] = None
 
 
 class InnovationResponse(InnovationBase):
-    id: int
+    id: uuid.UUID
     created_at: Optional[datetime] = None
     zone: Optional[ZoneResponse] = None
-    research_center: Optional[ResearchCenterResponse] = None
+    persona: Optional[PersonaResponse] = None
 
     class Config:
         from_attributes = True
 
 
 class InnovationExploreCard(BaseModel):
-    id: int
+    id: uuid.UUID
     title: str
     slug: str
-    category_tag: str
     trl: int
     short_description: str
     summary: str
     impact: str
     thumbnail_url: Optional[str] = None
-    download_url: Optional[str] = None
-    qr_code_data: Optional[str] = None
+    research_center: Optional[str] = None
+    implementation_potential: Optional[List[str]] = []
+    relevant_tags: Optional[List[str]] = []
     zone_name: str
-    zone_number: int
-    research_center_name: Optional[str] = None
+    persona_id: uuid.UUID
+    persona_name: str
     relevance_score: int = 0
 
     class Config:

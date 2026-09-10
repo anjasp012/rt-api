@@ -1,23 +1,23 @@
+import os
+import shutil
+import uuid
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status, UploadFile, File
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func, desc
 from app.db.session import get_db
 from app.models.user import User
 from app.models.persona import Persona
 from app.models.zone import Zone
-from app.models.research_center import ResearchCenter
 from app.models.innovation import Innovation
 from app.models.relevance import InnovationPersonaRelevance
 from app.models.suggestion import ResearchSuggestion
 from app.models.telemetry import TelemetryLog
-from app.models.setting import AppSetting
 from app.schemas.persona import PersonaCreate, PersonaUpdate, PersonaResponse
 from app.schemas.zone import ZoneCreate, ZoneUpdate, ZoneResponse
-from app.schemas.research_center import ResearchCenterCreate, ResearchCenterUpdate, ResearchCenterResponse
 from app.schemas.innovation import InnovationCreate, InnovationUpdate, InnovationResponse, RelevanceMappingItem
 from app.schemas.suggestion import SuggestionResponse, SuggestionStatusUpdate
-from app.schemas.admin import BulkStatusUpdate, BulkDeleteRequest, SettingsUpdate, DashboardAnalyticsResponse
+from app.schemas.admin import BulkStatusUpdate, BulkDeleteRequest, DashboardAnalyticsResponse
 from app.api.v1.deps import get_current_admin
 
 router = APIRouter()
@@ -33,13 +33,13 @@ def get_module_usage_history(db: Session = Depends(get_db), admin: User = Depend
     Mengambil histori & statistik berapa kali setiap Modul Pengguna (Slot 1) 
     dan Token Tantangan (Slot 2) digunakan di meja sentuh.
     """
-    personas = db.query(Persona).order_by(Persona.order_index.asc()).all()
-    zones = db.query(Zone).order_by(Zone.zone_number.asc()).all()
+    personas = db.query(Persona).order_by(Persona.created_at.asc()).all()
+    zones = db.query(Zone).order_by(Zone.created_at.asc()).all()
 
     # Hitung pemakaian persona dari telemetry & usulan
     persona_stats = []
     for p in personas:
-        t_count = db.query(func.count(TelemetryLog.id)).filter(TelemetryLog.persona_slug == p.slug).scalar() or 0
+        t_count = db.query(func.count(TelemetryLog.id)).filter(TelemetryLog.persona_id == p.id).scalar() or 0
         s_count = db.query(func.count(ResearchSuggestion.id)).filter(ResearchSuggestion.persona_id == p.id).scalar() or 0
         total_usage = t_count + s_count
         persona_stats.append({
@@ -47,7 +47,7 @@ def get_module_usage_history(db: Session = Depends(get_db), admin: User = Depend
             "name": p.name,
             "slug": p.slug,
             "tagline": p.tagline,
-            "order_index": p.order_index,
+            "icon_url": p.icon_url,
             "is_active": p.is_active,
             "usage_count": total_usage,
             "suggestion_count": s_count
@@ -56,16 +56,15 @@ def get_module_usage_history(db: Session = Depends(get_db), admin: User = Depend
     # Hitung pemakaian zona dari telemetry & usulan
     zone_stats = []
     for z in zones:
-        t_count = db.query(func.count(TelemetryLog.id)).filter(TelemetryLog.zone_slug == z.slug).scalar() or 0
+        t_count = db.query(func.count(TelemetryLog.id)).filter(TelemetryLog.zone_id == z.id).scalar() or 0
         s_count = db.query(func.count(ResearchSuggestion.id)).filter(ResearchSuggestion.zone_id == z.id).scalar() or 0
         total_usage = t_count + s_count
         zone_stats.append({
             "id": z.id,
             "name": z.name,
             "slug": z.slug,
-            "zone_number": z.zone_number,
             "description": z.description,
-            "color_theme": z.color_theme,
+            "icon_url": z.icon_url,
             "is_active": z.is_active,
             "usage_count": total_usage,
             "suggestion_count": s_count
@@ -89,8 +88,13 @@ def get_module_usage_history(db: Session = Depends(get_db), admin: User = Depend
     # Log aktivitas interaksi terbaru
     recent_logs = (
         db.query(TelemetryLog)
+        .options(
+            joinedload(TelemetryLog.persona),
+            joinedload(TelemetryLog.zone),
+            joinedload(TelemetryLog.innovation)
+        )
         .order_by(TelemetryLog.created_at.desc())
-        .limit(15)
+        .limit(25)
         .all()
     )
 
@@ -111,8 +115,14 @@ def get_module_usage_history(db: Session = Depends(get_db), admin: User = Depend
             {
                 "id": log.id,
                 "event": log.event_type,
-                "persona": log.persona_slug or "-",
-                "zone": log.zone_slug or "-",
+                "persona_id": log.persona_id,
+                "persona": log.persona.name if log.persona else "-",
+                "zone_id": log.zone_id,
+                "zone": log.zone.name if log.zone else "-",
+                "innovation_id": log.innovation_id,
+                "innovation_title": log.innovation.title if log.innovation else None,
+                "description": log.description,
+                "keterangan": log.description,
                 "created_at": log.created_at
             }
             for log in recent_logs
@@ -127,14 +137,14 @@ def get_module_usage_history(db: Session = Depends(get_db), admin: User = Depend
 # --- PERSONA CRUD ---
 @router.get("/personas", response_model=List[PersonaResponse])
 def get_all_personas(db: Session = Depends(get_db), admin: User = Depends(get_current_admin)):
-    return db.query(Persona).order_by(Persona.order_index.asc()).all()
+    return db.query(Persona).order_by(Persona.created_at.asc()).all()
 
 
 @router.post("/personas", response_model=PersonaResponse, status_code=status.HTTP_201_CREATED)
 def create_persona(payload: PersonaCreate, db: Session = Depends(get_db), admin: User = Depends(get_current_admin)):
     existing = db.query(Persona).filter(Persona.slug == payload.slug).first()
     if existing:
-        raise HTTPException(status_code=400, detail="Slug persona sudah digunakan")
+        raise HTTPException(status_code=409, detail="Slug persona sudah digunakan")
     
     persona = Persona(**payload.model_dump())
     db.add(persona)
@@ -144,7 +154,7 @@ def create_persona(payload: PersonaCreate, db: Session = Depends(get_db), admin:
 
 
 @router.put("/personas/{id}", response_model=PersonaResponse)
-def update_persona(id: int, payload: PersonaUpdate, db: Session = Depends(get_db), admin: User = Depends(get_current_admin)):
+def update_persona(id: uuid.UUID, payload: PersonaUpdate, db: Session = Depends(get_db), admin: User = Depends(get_current_admin)):
     persona = db.query(Persona).filter(Persona.id == id).first()
     if not persona:
         raise HTTPException(status_code=404, detail="Persona tidak ditemukan")
@@ -156,26 +166,31 @@ def update_persona(id: int, payload: PersonaUpdate, db: Session = Depends(get_db
 
 
 @router.delete("/personas/{id}")
-def delete_persona(id: int, db: Session = Depends(get_db), admin: User = Depends(get_current_admin)):
+def delete_persona(id: uuid.UUID, db: Session = Depends(get_db), admin: User = Depends(get_current_admin)):
     persona = db.query(Persona).filter(Persona.id == id).first()
     if not persona:
         raise HTTPException(status_code=404, detail="Persona tidak ditemukan")
-    db.delete(persona)
-    db.commit()
-    return {"message": f"Persona '{persona.name}' berhasil dihapus"}
+    try:
+        name = persona.name
+        db.delete(persona)
+        db.commit()
+        return {"message": f"Persona '{name}' berhasil dihapus"}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Gagal menghapus persona: {str(e)}")
 
 
 # --- ZONE CRUD ---
 @router.get("/zones", response_model=List[ZoneResponse])
 def get_all_zones(db: Session = Depends(get_db), admin: User = Depends(get_current_admin)):
-    return db.query(Zone).order_by(Zone.zone_number.asc()).all()
+    return db.query(Zone).order_by(Zone.created_at.asc()).all()
 
 
 @router.post("/zones", response_model=ZoneResponse, status_code=status.HTTP_201_CREATED)
 def create_zone(payload: ZoneCreate, db: Session = Depends(get_db), admin: User = Depends(get_current_admin)):
     existing = db.query(Zone).filter(Zone.slug == payload.slug).first()
     if existing:
-        raise HTTPException(status_code=400, detail="Slug zona sudah digunakan")
+        raise HTTPException(status_code=409, detail="Slug zona sudah digunakan")
     
     zone = Zone(**payload.model_dump())
     db.add(zone)
@@ -185,7 +200,7 @@ def create_zone(payload: ZoneCreate, db: Session = Depends(get_db), admin: User 
 
 
 @router.put("/zones/{id}", response_model=ZoneResponse)
-def update_zone(id: int, payload: ZoneUpdate, db: Session = Depends(get_db), admin: User = Depends(get_current_admin)):
+def update_zone(id: uuid.UUID, payload: ZoneUpdate, db: Session = Depends(get_db), admin: User = Depends(get_current_admin)):
     zone = db.query(Zone).filter(Zone.id == id).first()
     if not zone:
         raise HTTPException(status_code=404, detail="Zona tidak ditemukan")
@@ -197,13 +212,18 @@ def update_zone(id: int, payload: ZoneUpdate, db: Session = Depends(get_db), adm
 
 
 @router.delete("/zones/{id}")
-def delete_zone(id: int, db: Session = Depends(get_db), admin: User = Depends(get_current_admin)):
+def delete_zone(id: uuid.UUID, db: Session = Depends(get_db), admin: User = Depends(get_current_admin)):
     zone = db.query(Zone).filter(Zone.id == id).first()
     if not zone:
         raise HTTPException(status_code=404, detail="Zona tidak ditemukan")
-    db.delete(zone)
-    db.commit()
-    return {"message": f"Zona '{zone.name}' berhasil dihapus"}
+    try:
+        name = zone.name
+        db.delete(zone)
+        db.commit()
+        return {"message": f"Zona '{name}' berhasil dihapus"}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Gagal menghapus zona: {str(e)}")
 
 
 # =========================================================================
@@ -249,7 +269,7 @@ def get_all_suggestions(
 
 @router.patch("/suggestions/{suggestion_id}/status", response_model=SuggestionResponse)
 def update_suggestion_status(
-    suggestion_id: int,
+    suggestion_id: uuid.UUID,
     payload: SuggestionStatusUpdate,
     db: Session = Depends(get_db),
     admin: User = Depends(get_current_admin)
@@ -293,7 +313,7 @@ def bulk_update_suggestion_status(
     admin: User = Depends(get_current_admin)
 ):
     if not payload.ids:
-        raise HTTPException(status_code=400, detail="Daftar ID tidak boleh kosong")
+        raise HTTPException(status_code=422, detail="Daftar ID tidak boleh kosong")
 
     updated_count = db.query(ResearchSuggestion).filter(ResearchSuggestion.id.in_(payload.ids)).update(
         {ResearchSuggestion.status: payload.status.upper()}, synchronize_session=False
@@ -303,23 +323,31 @@ def bulk_update_suggestion_status(
 
 
 @router.delete("/suggestions/{suggestion_id}")
-def delete_suggestion(suggestion_id: int, db: Session = Depends(get_db), admin: User = Depends(get_current_admin)):
+def delete_suggestion(suggestion_id: uuid.UUID, db: Session = Depends(get_db), admin: User = Depends(get_current_admin)):
     suggestion = db.query(ResearchSuggestion).filter(ResearchSuggestion.id == suggestion_id).first()
     if not suggestion:
         raise HTTPException(status_code=404, detail="Data tidak ditemukan")
-    db.delete(suggestion)
-    db.commit()
-    return {"message": "Usulan berhasil dihapus"}
+    try:
+        db.delete(suggestion)
+        db.commit()
+        return {"message": "Usulan berhasil dihapus"}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Gagal menghapus usulan: {str(e)}")
 
 
 @router.post("/suggestions/bulk-delete")
 def bulk_delete_suggestions(payload: BulkDeleteRequest, db: Session = Depends(get_db), admin: User = Depends(get_current_admin)):
     if not payload.ids:
-        raise HTTPException(status_code=400, detail="Daftar ID tidak boleh kosong")
+        raise HTTPException(status_code=422, detail="Daftar ID tidak boleh kosong")
 
-    deleted_count = db.query(ResearchSuggestion).filter(ResearchSuggestion.id.in_(payload.ids)).delete(synchronize_session=False)
-    db.commit()
-    return {"message": f"{deleted_count} data usulan berhasil dihapus", "deleted_count": deleted_count}
+    try:
+        deleted_count = db.query(ResearchSuggestion).filter(ResearchSuggestion.id.in_(payload.ids)).delete(synchronize_session=False)
+        db.commit()
+        return {"message": f"{deleted_count} data usulan berhasil dihapus", "deleted_count": deleted_count}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Gagal menghapus usulan terpilih: {str(e)}")
 
 
 # =========================================================================
@@ -328,16 +356,16 @@ def bulk_delete_suggestions(payload: BulkDeleteRequest, db: Session = Depends(ge
 
 @router.get("/innovations", response_model=List[InnovationResponse])
 def list_innovations(
-    zone_id: Optional[int] = None,
+    zone_id: Optional[uuid.UUID] = None,
     limit: int = 100,
     offset: int = 0,
     db: Session = Depends(get_db),
     admin: User = Depends(get_current_admin)
 ):
-    query = db.query(Innovation).options(joinedload(Innovation.zone), joinedload(Innovation.research_center))
+    query = db.query(Innovation).options(joinedload(Innovation.zone), joinedload(Innovation.persona))
     if zone_id:
         query = query.filter(Innovation.zone_id == zone_id)
-    return query.order_by(Innovation.order_priority.desc()).offset(offset).limit(limit).all()
+    return query.order_by(Innovation.created_at.asc()).offset(offset).limit(limit).all()
 
 
 @router.post("/innovations", response_model=InnovationResponse, status_code=status.HTTP_201_CREATED)
@@ -350,7 +378,7 @@ def create_innovation(payload: InnovationCreate, db: Session = Depends(get_db), 
 
 
 @router.put("/innovations/{id}", response_model=InnovationResponse)
-def update_innovation(id: int, payload: InnovationUpdate, db: Session = Depends(get_db), admin: User = Depends(get_current_admin)):
+def update_innovation(id: uuid.UUID, payload: InnovationUpdate, db: Session = Depends(get_db), admin: User = Depends(get_current_admin)):
     inno = db.query(Innovation).filter(Innovation.id == id).first()
     if not inno:
         raise HTTPException(status_code=404, detail="Inovasi tidak ditemukan")
@@ -362,7 +390,7 @@ def update_innovation(id: int, payload: InnovationUpdate, db: Session = Depends(
 
 
 @router.delete("/innovations/{id}")
-def delete_innovation(id: int, db: Session = Depends(get_db), admin: User = Depends(get_current_admin)):
+def delete_innovation(id: uuid.UUID, db: Session = Depends(get_db), admin: User = Depends(get_current_admin)):
     inno = db.query(Innovation).filter(Innovation.id == id).first()
     if not inno:
         raise HTTPException(status_code=404, detail="Inovasi tidak ditemukan")
@@ -420,25 +448,36 @@ def get_analytics(db: Session = Depends(get_db), admin: User = Depends(get_curre
     }
 
 
-@router.get("/settings")
-def get_settings(db: Session = Depends(get_db), admin: User = Depends(get_current_admin)):
-    setting = db.query(AppSetting).filter(AppSetting.key == "frontend_display_limit").first()
-    limit_val = int(setting.value) if setting and str(setting.value).isdigit() else 50
-    return {"frontend_display_limit": limit_val}
 
+# =========================================================================
+# 📁 6. FILE UPLOAD (ICONS, THUMBNAILS, MEDIA)
+# =========================================================================
 
-@router.post("/settings")
-def update_settings(payload: SettingsUpdate, db: Session = Depends(get_db), admin: User = Depends(get_current_admin)):
-    if payload.frontend_display_limit and payload.frontend_display_limit <= 0:
-        raise HTTPException(status_code=400, detail="Batas kuota harus lebih besar dari 0")
+@router.post("/upload")
+def upload_file(file: UploadFile = File(...), admin: User = Depends(get_current_admin)):
+    """
+    Endpoint untuk mengunggah file gambar (thumbnail, icon) ke server.
+    Akan mengembalikan URL publik yang bisa diakses via browser atau Unity.
+    """
+    if not file.filename:
+        raise HTTPException(status_code=422, detail="Tidak ada file yang dipilih")
+    
+    # Generate unique filename
+    ext = os.path.splitext(file.filename)[1]
+    unique_filename = f"{uuid.uuid4().hex}{ext}"
+    
+    # Path to uploads directory (relative to backend root)
+    upload_dir = "uploads"
+    os.makedirs(upload_dir, exist_ok=True)
+    file_path = os.path.join(upload_dir, unique_filename)
+    
+    # Save the file
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
         
-    setting = db.query(AppSetting).filter(AppSetting.key == "frontend_display_limit").first()
-    if not setting:
-        setting = AppSetting(key="frontend_display_limit", value=str(payload.frontend_display_limit))
-        db.add(setting)
-    else:
-        setting.value = str(payload.frontend_display_limit)
-        
-    db.commit()
-    db.refresh(setting)
-    return {"message": "Pengaturan berhasil diperbarui", "frontend_display_limit": int(setting.value)}
+    # Return the URL (assuming server runs on domain/IP, we return relative URL from root)
+    # The frontend/Unity should prepend the base URL (e.g. http://localhost:8000)
+    # But to make it easier, we return the full absolute path if possible, or just the relative one.
+    file_url = f"/uploads/{unique_filename}"
+    
+    return {"message": "File berhasil diunggah", "url": file_url}

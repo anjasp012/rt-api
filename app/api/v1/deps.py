@@ -16,8 +16,7 @@ cms_bearer_scheme = HTTPBearer(
 # 🖥️ Interactive Table Access Token Header (from .env)
 table_token_header = APIKeyHeader(
     name="X-Access-Token",
-    auto_error=False,
-    description="Masukkan ACCESS_TOKEN dari file .env (misal: 'research_table_local_secret_2026')"
+    auto_error=False
 )
 
 
@@ -28,10 +27,9 @@ def verify_table_access_token(
     Validasi header X-Access-Token untuk semua request Layar Meja Interaktif.
     Nilai harus cocok dengan ACCESS_TOKEN di file .env.
     """
-    valid_tokens = [settings.ACCESS_TOKEN, settings.SECRET_KEY]
-    if not access_token or access_token not in valid_tokens:
+    if not access_token or access_token != settings.ACCESS_TOKEN:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
+            status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Akses ditolak: Header 'X-Access-Token' tidak valid atau tidak disertakan."
         )
     return access_token
