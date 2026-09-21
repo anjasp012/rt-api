@@ -1,10 +1,11 @@
 import uuid
 import math
 from typing import Optional, List
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from datetime import datetime
 from app.schemas.zone import ZoneResponse
 from app.schemas.persona import PersonaResponse
+from app.core.helpers import build_full_url, build_full_url_list
 
 
 class InnovationBase(BaseModel):
@@ -57,6 +58,16 @@ class InnovationResponse(InnovationBase):
     zone: Optional[ZoneResponse] = None
     persona: Optional[PersonaResponse] = None
 
+    @field_validator("thumbnail_url", mode="after")
+    @classmethod
+    def format_thumbnail_url(cls, v: Optional[str]) -> Optional[str]:
+        return build_full_url(v)
+
+    @field_validator("media_gallery", mode="after")
+    @classmethod
+    def format_media_gallery(cls, v: Optional[List[str]]) -> List[str]:
+        return build_full_url_list(v)
+
     class Config:
         from_attributes = True
 
@@ -77,6 +88,11 @@ class InnovationExploreCard(BaseModel):
     persona_id: uuid.UUID
     persona_name: str
     relevance_score: int = 0
+
+    @field_validator("thumbnail_url", mode="after")
+    @classmethod
+    def format_thumbnail_url(cls, v: Optional[str]) -> Optional[str]:
+        return build_full_url(v)
 
     class Config:
         from_attributes = True

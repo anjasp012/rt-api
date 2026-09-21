@@ -18,6 +18,7 @@ from app.schemas.innovation import (
 )
 from app.schemas.suggestion import SuggestionCreate, SuggestionResponse
 from app.schemas.stats import TelemetryEventCreate
+from app.core.helpers import build_full_url
 
 router = APIRouter()
 
@@ -59,12 +60,12 @@ def _get_explore_cards(
             "short_description": item.short_description,
             "summary": item.summary,
             "impact": item.impact,
-            "thumbnail_url": item.thumbnail_url,
+            "thumbnail_url": build_full_url(item.thumbnail_url),
             "research_center": item.research_center,
             "implementation_potential": item.implementation_potential,
             "relevant_tags": item.relevant_tags,
             "zone_name": item.zone.name if item.zone else "Umum",
-            "research_center_name": item.research_center.name if item.research_center else "Pusat Riset BRIN",
+            "research_center_name": item.research_center if item.research_center else "Pusat Riset BRIN",
             "persona_id": item.persona_id,
             "persona_name": item.persona.name if item.persona else "Umum",
             "relevance_score": relevance_score

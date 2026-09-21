@@ -6,8 +6,10 @@ from app.core.config import settings
 from app.db.session import engine, Base
 from app.api.v1.router import api_router
 
-# Ensure uploads directory exists
-os.makedirs("uploads", exist_ok=True)
+# Ensure uploads directory exists (absolute path)
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+UPLOADS_DIR = os.path.join(BASE_DIR, "uploads")
+os.makedirs(UPLOADS_DIR, exist_ok=True)
 
 # Auto create tables on startup
 Base.metadata.create_all(bind=engine)
@@ -52,7 +54,7 @@ async def global_exception_handler(request: Request, exc: Exception):
         response.headers["Access-Control-Allow-Headers"] = "*"
     return response
 
-app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+app.mount("/uploads", StaticFiles(directory=UPLOADS_DIR), name="uploads")
 app.include_router(api_router, prefix="/api/v1")
 
 

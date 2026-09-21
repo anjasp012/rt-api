@@ -19,6 +19,7 @@ from app.schemas.innovation import InnovationCreate, InnovationUpdate, Innovatio
 from app.schemas.suggestion import SuggestionResponse, SuggestionStatusUpdate
 from app.schemas.admin import BulkStatusUpdate, BulkDeleteRequest, DashboardAnalyticsResponse
 from app.api.v1.deps import get_current_admin
+from app.core.helpers import build_full_url
 
 router = APIRouter()
 
@@ -47,7 +48,7 @@ def get_module_usage_history(db: Session = Depends(get_db), admin: User = Depend
             "name": p.name,
             "slug": p.slug,
             "tagline": p.tagline,
-            "icon_url": p.icon_url,
+            "icon_url": build_full_url(p.icon_url),
             "is_active": p.is_active,
             "usage_count": total_usage,
             "suggestion_count": s_count
@@ -64,7 +65,7 @@ def get_module_usage_history(db: Session = Depends(get_db), admin: User = Depend
             "name": z.name,
             "slug": z.slug,
             "description": z.description,
-            "icon_url": z.icon_url,
+            "icon_url": build_full_url(z.icon_url),
             "is_active": z.is_active,
             "usage_count": total_usage,
             "suggestion_count": s_count
@@ -466,8 +467,9 @@ def upload_file(file: UploadFile = File(...), admin: User = Depends(get_current_
     ext = os.path.splitext(file.filename)[1]
     unique_filename = f"{uuid.uuid4().hex}{ext}"
     
-    # Path to uploads directory (relative to backend root)
-    upload_dir = "uploads"
+    # Path to uploads directory (absolute to project root)
+    base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+    upload_dir = os.path.join(base_dir, "uploads")
     os.makedirs(upload_dir, exist_ok=True)
     file_path = os.path.join(upload_dir, unique_filename)
     
@@ -475,9 +477,12 @@ def upload_file(file: UploadFile = File(...), admin: User = Depends(get_current_
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
         
-    # Return the URL (assuming server runs on domain/IP, we return relative URL from root)
-    # The frontend/Unity should prepend the base URL (e.g. http://localhost:8000)
-    # But to make it easier, we return the full absolute path if possible, or just the relative one.
-    file_url = f"/uploads/{unique_filename}"
+    full_url = build_full_url(f"/uploads/{unique_filename}")
+    relative_url = f"/uploads/{unique_filename}"
     
-    return {"message": "File berhasil diunggah", "url": file_url}
+    return {
+        "message": "File berhasil diunggah", 
+        "url": full_url,
+        "relative_url": relative_url,
+        "filename": unique_filename
+    }
