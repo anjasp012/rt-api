@@ -20,6 +20,7 @@ from app.schemas.suggestion import SuggestionResponse, SuggestionStatusUpdate
 from app.schemas.admin import BulkStatusUpdate, BulkDeleteRequest, DashboardAnalyticsResponse
 from app.api.v1.deps import get_current_admin
 from app.core.helpers import build_full_url
+from app.core.config import UPLOADS_DIR
 
 router = APIRouter()
 
@@ -467,11 +468,7 @@ def upload_file(file: UploadFile = File(...), admin: User = Depends(get_current_
     ext = os.path.splitext(file.filename)[1]
     unique_filename = f"{uuid.uuid4().hex}{ext}"
     
-    # Path to uploads directory (absolute to project root)
-    base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-    upload_dir = os.path.join(base_dir, "uploads")
-    os.makedirs(upload_dir, exist_ok=True)
-    file_path = os.path.join(upload_dir, unique_filename)
+    file_path = os.path.join(UPLOADS_DIR, unique_filename)
     
     # Save the file
     with open(file_path, "wb") as buffer:

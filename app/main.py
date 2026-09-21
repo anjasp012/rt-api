@@ -2,14 +2,9 @@ import os
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
-from app.core.config import settings
+from app.core.config import settings, UPLOADS_DIR
 from app.db.session import engine, Base
 from app.api.v1.router import api_router
-
-# Ensure uploads directory exists (absolute path)
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-UPLOADS_DIR = os.path.join(BASE_DIR, "uploads")
-os.makedirs(UPLOADS_DIR, exist_ok=True)
 
 # Auto create tables on startup
 Base.metadata.create_all(bind=engine)
