@@ -21,21 +21,21 @@ def build_full_url(url: Optional[str]) -> Optional[str]:
     if url.startswith("http://") or url.startswith("https://") or url.startswith("data:"):
         return url
         
-    backend_url = getattr(settings, "BACKEND_URL", "http://127.0.0.1:8000").rstrip("/")
+    backend_url = getattr(settings, "BACKEND_URL", "").rstrip("/")
     
     if url.startswith("/uploads/"):
-        return f"{backend_url}{url}"
+        return f"{backend_url}{url}" if backend_url else url
         
     if url.startswith("uploads/"):
-        return f"{backend_url}/{url}"
+        return f"{backend_url}/{url}" if backend_url else f"/{url}"
         
     common_extensions = (".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg", ".bmp", ".ico", ".mp4", ".pdf")
     if any(url.lower().endswith(ext) for ext in common_extensions):
         clean_name = url.lstrip("/")
-        return f"{backend_url}/uploads/{clean_name}"
+        return f"{backend_url}/uploads/{clean_name}" if backend_url else f"/uploads/{clean_name}"
         
     if url.startswith("/"):
-        return f"{backend_url}{url}"
+        return f"{backend_url}{url}" if backend_url else url
         
     return url
 
