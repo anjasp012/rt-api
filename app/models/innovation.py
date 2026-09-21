@@ -36,3 +36,7 @@ class Innovation(Base):
     @property
     def persona_name(self):
         return self.persona.name if self.persona else None
+
+    @property
+    def zone_name(self):
+        return self.zone.name if self.zone else None

@@ -57,6 +57,8 @@ class InnovationResponse(InnovationBase):
     created_at: Optional[datetime] = None
     zone: Optional[ZoneResponse] = None
     persona: Optional[PersonaResponse] = None
+    persona_name: Optional[str] = None
+    zone_name: Optional[str] = None
 
     @field_validator("thumbnail_url", mode="after")
     @classmethod
