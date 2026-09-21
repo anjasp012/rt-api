@@ -5,6 +5,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status, UploadFile, File
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func, desc
+from sqlalchemy.exc import IntegrityError
 from app.db.session import get_db
 from app.models.user import User
 from app.models.persona import Persona
@@ -33,7 +34,7 @@ router = APIRouter()
 def get_module_usage_history(db: Session = Depends(get_db), admin: User = Depends(get_current_admin)):
     """
     Mengambil histori & statistik berapa kali setiap Modul Pengguna (Slot 1) 
-    dan Token Tantangan (Slot 2) digunakan di meja sentuh.
+    dan Modul Tantangan (Slot 2) digunakan di meja sentuh.
     """
     personas = db.query(Persona).order_by(Persona.created_at.asc()).all()
     zones = db.query(Zone).order_by(Zone.created_at.asc()).all()
@@ -133,7 +134,7 @@ def get_module_usage_history(db: Session = Depends(get_db), admin: User = Depend
 
 
 # =========================================================================
-# 👥 2. CRUD MASTER MODUL PENGGUNA (PERSONA) & TOKEN TANTANGAN (ZONA)
+# 👥 2. CRUD MASTER MODUL PENGGUNA (PERSONA) & MODUL TANTANGAN (ZONA)
 # =========================================================================
 
 # --- PERSONA CRUD ---
@@ -146,13 +147,20 @@ def get_all_personas(db: Session = Depends(get_db), admin: User = Depends(get_cu
 def create_persona(payload: PersonaCreate, db: Session = Depends(get_db), admin: User = Depends(get_current_admin)):
     existing = db.query(Persona).filter(Persona.slug == payload.slug).first()
     if existing:
-        raise HTTPException(status_code=409, detail="Slug persona sudah digunakan")
+        raise HTTPException(status_code=409, detail="Slug modul pengguna sudah digunakan")
     
-    persona = Persona(**payload.model_dump())
-    db.add(persona)
-    db.commit()
-    db.refresh(persona)
-    return persona
+    try:
+        persona = Persona(**payload.model_dump())
+        db.add(persona)
+        db.commit()
+        db.refresh(persona)
+        return persona
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Slug modul pengguna sudah digunakan atau data konflik")
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Gagal menambah modul pengguna: {str(e)}")
 
 
 @router.put("/personas/{id}", response_model=PersonaResponse)
@@ -160,11 +168,22 @@ def update_persona(id: uuid.UUID, payload: PersonaUpdate, db: Session = Depends(
     persona = db.query(Persona).filter(Persona.id == id).first()
     if not persona:
         raise HTTPException(status_code=404, detail="Persona tidak ditemukan")
-    for key, val in payload.model_dump(exclude_unset=True).items():
-        setattr(persona, key, val)
-    db.commit()
-    db.refresh(persona)
-    return persona
+    if payload.slug and payload.slug != persona.slug:
+        existing = db.query(Persona).filter(Persona.slug == payload.slug, Persona.id != id).first()
+        if existing:
+            raise HTTPException(status_code=409, detail="Slug modul pengguna sudah digunakan")
+    try:
+        for key, val in payload.model_dump(exclude_unset=True).items():
+            setattr(persona, key, val)
+        db.commit()
+        db.refresh(persona)
+        return persona
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Slug modul pengguna sudah digunakan atau data konflik")
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Gagal memperbarui modul pengguna: {str(e)}")
 
 
 @router.delete("/personas/{id}")
@@ -192,40 +211,58 @@ def get_all_zones(db: Session = Depends(get_db), admin: User = Depends(get_curre
 def create_zone(payload: ZoneCreate, db: Session = Depends(get_db), admin: User = Depends(get_current_admin)):
     existing = db.query(Zone).filter(Zone.slug == payload.slug).first()
     if existing:
-        raise HTTPException(status_code=409, detail="Slug zona sudah digunakan")
+        raise HTTPException(status_code=409, detail="Slug modul tantangan sudah digunakan")
     
-    zone = Zone(**payload.model_dump())
-    db.add(zone)
-    db.commit()
-    db.refresh(zone)
-    return zone
+    try:
+        zone = Zone(**payload.model_dump())
+        db.add(zone)
+        db.commit()
+        db.refresh(zone)
+        return zone
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Slug modul tantangan sudah digunakan atau data konflik")
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Gagal menambah modul tantangan: {str(e)}")
 
 
 @router.put("/zones/{id}", response_model=ZoneResponse)
 def update_zone(id: uuid.UUID, payload: ZoneUpdate, db: Session = Depends(get_db), admin: User = Depends(get_current_admin)):
     zone = db.query(Zone).filter(Zone.id == id).first()
     if not zone:
-        raise HTTPException(status_code=404, detail="Zona tidak ditemukan")
-    for key, val in payload.model_dump(exclude_unset=True).items():
-        setattr(zone, key, val)
-    db.commit()
-    db.refresh(zone)
-    return zone
+        raise HTTPException(status_code=404, detail="Modul tantangan tidak ditemukan")
+    if payload.slug and payload.slug != zone.slug:
+        existing = db.query(Zone).filter(Zone.slug == payload.slug, Zone.id != id).first()
+        if existing:
+            raise HTTPException(status_code=409, detail="Slug modul tantangan sudah digunakan")
+    try:
+        for key, val in payload.model_dump(exclude_unset=True).items():
+            setattr(zone, key, val)
+        db.commit()
+        db.refresh(zone)
+        return zone
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Slug modul tantangan sudah digunakan atau data konflik")
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Gagal memperbarui modul tantangan: {str(e)}")
 
 
 @router.delete("/zones/{id}")
 def delete_zone(id: uuid.UUID, db: Session = Depends(get_db), admin: User = Depends(get_current_admin)):
     zone = db.query(Zone).filter(Zone.id == id).first()
     if not zone:
-        raise HTTPException(status_code=404, detail="Zona tidak ditemukan")
+        raise HTTPException(status_code=404, detail="Modul tantangan tidak ditemukan")
     try:
         name = zone.name
         db.delete(zone)
         db.commit()
-        return {"message": f"Zona '{name}' berhasil dihapus"}
+        return {"message": f"Modul '{name}' berhasil dihapus"}
     except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Gagal menghapus zona: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Gagal menghapus modul tantangan: {str(e)}")
 
 
 # =========================================================================
@@ -372,11 +409,22 @@ def list_innovations(
 
 @router.post("/innovations", response_model=InnovationResponse, status_code=status.HTTP_201_CREATED)
 def create_innovation(payload: InnovationCreate, db: Session = Depends(get_db), admin: User = Depends(get_current_admin)):
-    inno = Innovation(**payload.model_dump())
-    db.add(inno)
-    db.commit()
-    db.refresh(inno)
-    return inno
+    existing = db.query(Innovation).filter(Innovation.slug == payload.slug).first()
+    if existing:
+        raise HTTPException(status_code=409, detail="Slug inovasi sudah digunakan")
+    
+    try:
+        inno = Innovation(**payload.model_dump())
+        db.add(inno)
+        db.commit()
+        db.refresh(inno)
+        return inno
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Slug inovasi sudah digunakan atau data konflik")
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Gagal menyimpan inovasi: {str(e)}")
 
 
 @router.put("/innovations/{id}", response_model=InnovationResponse)
@@ -384,11 +432,22 @@ def update_innovation(id: uuid.UUID, payload: InnovationUpdate, db: Session = De
     inno = db.query(Innovation).filter(Innovation.id == id).first()
     if not inno:
         raise HTTPException(status_code=404, detail="Inovasi tidak ditemukan")
-    for key, val in payload.model_dump(exclude_unset=True).items():
-        setattr(inno, key, val)
-    db.commit()
-    db.refresh(inno)
-    return inno
+    if payload.slug and payload.slug != inno.slug:
+        existing = db.query(Innovation).filter(Innovation.slug == payload.slug, Innovation.id != id).first()
+        if existing:
+            raise HTTPException(status_code=409, detail="Slug inovasi sudah digunakan")
+    try:
+        for key, val in payload.model_dump(exclude_unset=True).items():
+            setattr(inno, key, val)
+        db.commit()
+        db.refresh(inno)
+        return inno
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Slug inovasi sudah digunakan atau data konflik")
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Gagal memperbarui inovasi: {str(e)}")
 
 
 @router.delete("/innovations/{id}")

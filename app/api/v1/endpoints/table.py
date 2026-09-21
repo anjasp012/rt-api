@@ -84,7 +84,7 @@ def get_active_personas(db: Session = Depends(get_db)):
 
 @router.get("/zones", response_model=List[ZoneResponse])
 def get_active_zones(db: Session = Depends(get_db)):
-    """Mengambil seluruh daftar Token Tantangan (Zona Riset BRIN) yang aktif"""
+    """Mengambil seluruh daftar Modul Tantangan (Zona Riset BRIN) yang aktif"""
     return db.query(Zone).filter(Zone.is_active == True).order_by(Zone.created_at.asc()).all()
 
 

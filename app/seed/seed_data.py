@@ -65,7 +65,7 @@ def seed_database():
             persona_map[obj.slug] = obj
         print("[+] 8 Personas ready.")
 
-        print("[+] Seeding 9 Research Zones (Token Tantangan BRIN)...")
+        print("[+] Seeding 9 Research Zones (Modul Tantangan BRIN)...")
         zones_data = [
             {"name": "Biodiversitas", "slug": "biodiversitas", "description": "Keanekaragaman hayati, konservasi, dan sumber daya hayati.", "icon_url": "leaf"},
             {"name": "Pangan", "slug": "pangan", "description": "Ketahanan pangan, produktivitas pertanian, dan distribusi.", "icon_url": "wheat"},
