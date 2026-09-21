@@ -18,6 +18,17 @@ def build_full_url(url: Optional[str]) -> Optional[str]:
     if not url:
         return None
         
+    # Bersihkan sisa URL localhost lama dari database jika ada
+    for prefix in (
+        "http://127.0.0.1:8000",
+        "http://localhost:8000",
+        "https://127.0.0.1:8000",
+        "https://localhost:8000",
+    ):
+        if url.startswith(prefix):
+            url = url[len(prefix):]
+            break
+
     if url.startswith("http://") or url.startswith("https://") or url.startswith("data:"):
         return url
         
