@@ -8,9 +8,9 @@ from app.core.helpers import build_full_url
 class PersonaBase(BaseModel):
     name: str
     slug: str
-    tagline: str
+    tagline: Optional[str] = None
+    icon: Optional[str] = None
     icon_url: Optional[str] = None
-
     is_active: bool = True
 
 
@@ -22,8 +22,8 @@ class PersonaUpdate(BaseModel):
     name: Optional[str] = None
     slug: Optional[str] = None
     tagline: Optional[str] = None
+    icon: Optional[str] = None
     icon_url: Optional[str] = None
-
     is_active: Optional[bool] = None
 
 

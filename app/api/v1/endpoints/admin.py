@@ -9,15 +9,18 @@ from sqlalchemy.exc import IntegrityError
 from app.db.session import get_db
 from app.models.user import User
 from app.models.persona import Persona
-from app.models.zone import Zone
-from app.models.innovation import Innovation
-from app.models.relevance import InnovationPersonaRelevance
+from app.models.challenge import Challenge, Zone
+from app.models.solution import Solution, Innovation
+from app.models.relevance import SolutionPersonaRelevance, InnovationPersonaRelevance
 from app.models.suggestion import ResearchSuggestion
-from app.models.telemetry import TelemetryLog
 from app.schemas.persona import PersonaCreate, PersonaUpdate, PersonaResponse
-from app.schemas.zone import ZoneCreate, ZoneUpdate, ZoneResponse
-from app.schemas.innovation import InnovationCreate, InnovationUpdate, InnovationResponse, RelevanceMappingItem
-from app.schemas.suggestion import SuggestionResponse, SuggestionStatusUpdate
+from app.schemas.challenge import ChallengeCreate, ChallengeUpdate, ChallengeResponse, ZoneCreate, ZoneUpdate, ZoneResponse
+from app.schemas.solution import (
+    SolutionCreate, SolutionUpdate, SolutionResponse,
+    InnovationCreate, InnovationUpdate, InnovationResponse,
+    RelevanceMappingItem
+)
+from app.schemas.suggestion import SuggestionResponse, SuggestionAdminResponse, SuggestionStatusUpdate
 from app.schemas.admin import BulkStatusUpdate, BulkDeleteRequest, DashboardAnalyticsResponse
 from app.api.v1.deps import get_current_admin
 from app.core.helpers import build_full_url
@@ -33,108 +36,113 @@ router = APIRouter()
 @router.get("/module-usage")
 def get_module_usage_history(db: Session = Depends(get_db), admin: User = Depends(get_current_admin)):
     """
-    Mengambil histori & statistik berapa kali setiap Modul Pengguna (Slot 1) 
+    Mengambil histori & statistik berapa kali setiap Modul Peran (Slot 1) 
     dan Modul Tantangan (Slot 2) digunakan di meja sentuh.
     """
     personas = db.query(Persona).order_by(Persona.created_at.asc()).all()
-    zones = db.query(Zone).order_by(Zone.created_at.asc()).all()
+    challenges = db.query(Challenge).order_by(Challenge.created_at.asc()).all()
 
-    # Hitung pemakaian persona dari telemetry & usulan
+    # Hitung pemakaian peran dari usulan
     persona_stats = []
     for p in personas:
-        t_count = db.query(func.count(TelemetryLog.id)).filter(TelemetryLog.persona_id == p.id).scalar() or 0
-        s_count = db.query(func.count(ResearchSuggestion.id)).filter(ResearchSuggestion.persona_id == p.id).scalar() or 0
-        total_usage = t_count + s_count
+        s_count = db.query(func.count(ResearchSuggestion.id)).join(ResearchSuggestion.personas).filter(Persona.id == p.id).scalar() or 0
+        sol_count = len(p.solutions) if hasattr(p, 'solutions') and p.solutions else 0
+        total_usage = s_count + sol_count
         persona_stats.append({
             "id": p.id,
             "name": p.name,
             "slug": p.slug,
             "tagline": p.tagline,
+            "icon": getattr(p, 'icon', None),
             "icon_url": build_full_url(p.icon_url),
             "is_active": p.is_active,
             "usage_count": total_usage,
             "suggestion_count": s_count
         })
 
-    # Hitung pemakaian zona dari telemetry & usulan
-    zone_stats = []
-    for z in zones:
-        t_count = db.query(func.count(TelemetryLog.id)).filter(TelemetryLog.zone_id == z.id).scalar() or 0
-        s_count = db.query(func.count(ResearchSuggestion.id)).filter(ResearchSuggestion.zone_id == z.id).scalar() or 0
-        total_usage = t_count + s_count
-        zone_stats.append({
-            "id": z.id,
-            "name": z.name,
-            "slug": z.slug,
-            "description": z.description,
-            "icon_url": build_full_url(z.icon_url),
-            "is_active": z.is_active,
+    # Hitung pemakaian tantangan dari usulan
+    challenge_stats = []
+    for c in challenges:
+        s_count = db.query(func.count(ResearchSuggestion.id)).join(ResearchSuggestion.challenges).filter(Challenge.id == c.id).scalar() or 0
+        sol_count = db.query(func.count(Solution.id)).filter(Solution.challenge_id == c.id).scalar() or 0
+        total_usage = s_count + sol_count
+        challenge_stats.append({
+            "id": c.id,
+            "name": c.name,
+            "slug": c.slug,
+            "color": c.color,
+            "icon": c.icon,
+            "description": c.description,
+            "icon_url": build_full_url(c.icon_url),
+            "is_active": c.is_active,
             "usage_count": total_usage,
             "suggestion_count": s_count
         })
 
-    # Kombinasi paling sering dimainkan (Persona + Zona)
+    # Kombinasi paling sering dimainkan (Peran + Tantangan)
     comb_suggestions = (
-        db.query(Persona.name, Zone.name, func.count(ResearchSuggestion.id))
-        .join(Persona, ResearchSuggestion.persona_id == Persona.id)
-        .join(Zone, ResearchSuggestion.zone_id == Zone.id)
-        .group_by(Persona.name, Zone.name)
+        db.query(Persona.name, Challenge.name, func.count(ResearchSuggestion.id))
+        .join(ResearchSuggestion.personas)
+        .join(ResearchSuggestion.challenges)
+        .group_by(Persona.name, Challenge.name)
         .order_by(func.count(ResearchSuggestion.id).desc())
         .limit(10)
         .all()
     )
     top_combinations = [
-        {"persona": row[0], "zone": row[1], "count": row[2]}
+        {"persona": row[0], "zone": row[1], "challenge": row[1], "count": row[2]}
         for row in comb_suggestions
     ]
 
-    # Log aktivitas interaksi terbaru
-    recent_logs = (
-        db.query(TelemetryLog)
+    # Log aktivitas usulan terbaru
+    recent_suggestions = (
+        db.query(ResearchSuggestion)
         .options(
-            joinedload(TelemetryLog.persona),
-            joinedload(TelemetryLog.zone),
-            joinedload(TelemetryLog.innovation)
+            joinedload(ResearchSuggestion.personas),
+            joinedload(ResearchSuggestion.challenges)
         )
-        .order_by(TelemetryLog.created_at.desc())
+        .order_by(ResearchSuggestion.created_at.desc())
         .limit(25)
         .all()
     )
 
-    total_sessions = db.query(func.count(TelemetryLog.id)).scalar() or 0
     total_suggestions = db.query(func.count(ResearchSuggestion.id)).scalar() or 0
 
     return {
         "summary": {
             "total_persona_types": len(personas),
-            "total_zone_types": len(zones),
-            "total_interactive_plays": total_sessions + total_suggestions,
+            "total_zone_types": len(challenges),
+            "total_challenge_types": len(challenges),
+            "total_interactive_plays": total_suggestions,
             "total_suggestions_submitted": total_suggestions
         },
         "persona_stats": sorted(persona_stats, key=lambda x: x["usage_count"], reverse=True),
-        "zone_stats": sorted(zone_stats, key=lambda x: x["usage_count"], reverse=True),
+        "zone_stats": sorted(challenge_stats, key=lambda x: x["usage_count"], reverse=True),
+        "challenge_stats": sorted(challenge_stats, key=lambda x: x["usage_count"], reverse=True),
         "top_combinations": top_combinations,
         "recent_logs": [
             {
-                "id": log.id,
-                "event": log.event_type,
-                "persona_id": log.persona_id,
-                "persona": log.persona.name if log.persona else "-",
-                "zone_id": log.zone_id,
-                "zone": log.zone.name if log.zone else "-",
-                "innovation_id": log.innovation_id,
-                "innovation_title": log.innovation.title if log.innovation else None,
-                "description": log.description,
-                "keterangan": log.description,
-                "created_at": log.created_at
+                "id": s.id,
+                "event": "SUGGESTION",
+                "persona_id": s.persona_id,
+                "persona": s.persona_name or "-",
+                "zone_id": s.challenge_id,
+                "zone": s.challenge_name or "-",
+                "challenge_id": s.challenge_id,
+                "challenge": s.challenge_name or "-",
+                "solution_id": None,
+                "solution_title": None,
+                "description": s.title,
+                "keterangan": s.deskripsi or s.title,
+                "created_at": s.created_at
             }
-            for log in recent_logs
+            for s in recent_suggestions
         ]
     }
 
 
 # =========================================================================
-# 👥 2. CRUD MASTER MODUL PENGGUNA (PERSONA) & MODUL TANTANGAN (ZONA)
+# 👥 2. CRUD MASTER PERAN (PERSONA) & TANTANGAN (CHALLENGE / ZONE)
 # =========================================================================
 
 # --- PERSONA CRUD ---
@@ -147,7 +155,7 @@ def get_all_personas(db: Session = Depends(get_db), admin: User = Depends(get_cu
 def create_persona(payload: PersonaCreate, db: Session = Depends(get_db), admin: User = Depends(get_current_admin)):
     existing = db.query(Persona).filter(Persona.slug == payload.slug).first()
     if existing:
-        raise HTTPException(status_code=409, detail="Slug modul pengguna sudah digunakan")
+        raise HTTPException(status_code=409, detail="Slug peran sudah digunakan")
     
     try:
         persona = Persona(**payload.model_dump())
@@ -157,21 +165,21 @@ def create_persona(payload: PersonaCreate, db: Session = Depends(get_db), admin:
         return persona
     except IntegrityError:
         db.rollback()
-        raise HTTPException(status_code=409, detail="Slug modul pengguna sudah digunakan atau data konflik")
+        raise HTTPException(status_code=409, detail="Slug peran sudah digunakan atau data konflik")
     except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Gagal menambah modul pengguna: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Gagal menambah peran: {str(e)}")
 
 
 @router.put("/personas/{id}", response_model=PersonaResponse)
 def update_persona(id: uuid.UUID, payload: PersonaUpdate, db: Session = Depends(get_db), admin: User = Depends(get_current_admin)):
     persona = db.query(Persona).filter(Persona.id == id).first()
     if not persona:
-        raise HTTPException(status_code=404, detail="Persona tidak ditemukan")
+        raise HTTPException(status_code=404, detail="Peran tidak ditemukan")
     if payload.slug and payload.slug != persona.slug:
         existing = db.query(Persona).filter(Persona.slug == payload.slug, Persona.id != id).first()
         if existing:
-            raise HTTPException(status_code=409, detail="Slug modul pengguna sudah digunakan")
+            raise HTTPException(status_code=409, detail="Slug peran sudah digunakan")
     try:
         for key, val in payload.model_dump(exclude_unset=True).items():
             setattr(persona, key, val)
@@ -180,123 +188,143 @@ def update_persona(id: uuid.UUID, payload: PersonaUpdate, db: Session = Depends(
         return persona
     except IntegrityError:
         db.rollback()
-        raise HTTPException(status_code=409, detail="Slug modul pengguna sudah digunakan atau data konflik")
+        raise HTTPException(status_code=409, detail="Slug peran sudah digunakan atau data konflik")
     except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Gagal memperbarui modul pengguna: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Gagal memperbarui peran: {str(e)}")
 
 
 @router.delete("/personas/{id}")
 def delete_persona(id: uuid.UUID, db: Session = Depends(get_db), admin: User = Depends(get_current_admin)):
     persona = db.query(Persona).filter(Persona.id == id).first()
     if not persona:
-        raise HTTPException(status_code=404, detail="Persona tidak ditemukan")
+        raise HTTPException(status_code=404, detail="Peran tidak ditemukan")
     try:
         name = persona.name
         db.delete(persona)
         db.commit()
-        return {"message": f"Persona '{name}' berhasil dihapus"}
+        return {"message": f"Peran '{name}' berhasil dihapus"}
     except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Gagal menghapus persona: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Gagal menghapus peran: {str(e)}")
 
 
-# --- ZONE CRUD ---
-@router.get("/zones", response_model=List[ZoneResponse])
-def get_all_zones(db: Session = Depends(get_db), admin: User = Depends(get_current_admin)):
-    return db.query(Zone).order_by(Zone.created_at.asc()).all()
+# --- CHALLENGE / ZONE CRUD ---
+@router.get("/challenges", response_model=List[ChallengeResponse])
+def get_all_challenges(db: Session = Depends(get_db), admin: User = Depends(get_current_admin)):
+    return db.query(Challenge).order_by(Challenge.created_at.asc()).all()
+
+# Alias route untuk /zones
+@router.get("/zones", response_model=List[ChallengeResponse], include_in_schema=False)
+def get_all_zones_alias(db: Session = Depends(get_db), admin: User = Depends(get_current_admin)):
+    return get_all_challenges(db=db, admin=admin)
 
 
-@router.post("/zones", response_model=ZoneResponse, status_code=status.HTTP_201_CREATED)
-def create_zone(payload: ZoneCreate, db: Session = Depends(get_db), admin: User = Depends(get_current_admin)):
-    existing = db.query(Zone).filter(Zone.slug == payload.slug).first()
+@router.post("/challenges", response_model=ChallengeResponse, status_code=status.HTTP_201_CREATED)
+def create_challenge(payload: ChallengeCreate, db: Session = Depends(get_db), admin: User = Depends(get_current_admin)):
+    existing = db.query(Challenge).filter(Challenge.slug == payload.slug).first()
     if existing:
-        raise HTTPException(status_code=409, detail="Slug modul tantangan sudah digunakan")
+        raise HTTPException(status_code=409, detail="Slug tantangan sudah digunakan")
     
     try:
-        zone = Zone(**payload.model_dump())
-        db.add(zone)
+        challenge = Challenge(**payload.model_dump())
+        db.add(challenge)
         db.commit()
-        db.refresh(zone)
-        return zone
+        db.refresh(challenge)
+        return challenge
     except IntegrityError:
         db.rollback()
-        raise HTTPException(status_code=409, detail="Slug modul tantangan sudah digunakan atau data konflik")
+        raise HTTPException(status_code=409, detail="Slug tantangan sudah digunakan atau data konflik")
     except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Gagal menambah modul tantangan: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Gagal menambah tantangan: {str(e)}")
+
+# Alias route untuk POST /zones
+@router.post("/zones", response_model=ChallengeResponse, status_code=status.HTTP_201_CREATED, include_in_schema=False)
+def create_zone_alias(payload: ChallengeCreate, db: Session = Depends(get_db), admin: User = Depends(get_current_admin)):
+    return create_challenge(payload=payload, db=db, admin=admin)
 
 
-@router.put("/zones/{id}", response_model=ZoneResponse)
-def update_zone(id: uuid.UUID, payload: ZoneUpdate, db: Session = Depends(get_db), admin: User = Depends(get_current_admin)):
-    zone = db.query(Zone).filter(Zone.id == id).first()
-    if not zone:
-        raise HTTPException(status_code=404, detail="Modul tantangan tidak ditemukan")
-    if payload.slug and payload.slug != zone.slug:
-        existing = db.query(Zone).filter(Zone.slug == payload.slug, Zone.id != id).first()
+@router.put("/challenges/{id}", response_model=ChallengeResponse)
+def update_challenge(id: uuid.UUID, payload: ChallengeUpdate, db: Session = Depends(get_db), admin: User = Depends(get_current_admin)):
+    challenge = db.query(Challenge).filter(Challenge.id == id).first()
+    if not challenge:
+        raise HTTPException(status_code=404, detail="Tantangan tidak ditemukan")
+    if payload.slug and payload.slug != challenge.slug:
+        existing = db.query(Challenge).filter(Challenge.slug == payload.slug, Challenge.id != id).first()
         if existing:
-            raise HTTPException(status_code=409, detail="Slug modul tantangan sudah digunakan")
+            raise HTTPException(status_code=409, detail="Slug tantangan sudah digunakan")
     try:
         for key, val in payload.model_dump(exclude_unset=True).items():
-            setattr(zone, key, val)
+            setattr(challenge, key, val)
         db.commit()
-        db.refresh(zone)
-        return zone
+        db.refresh(challenge)
+        return challenge
     except IntegrityError:
         db.rollback()
-        raise HTTPException(status_code=409, detail="Slug modul tantangan sudah digunakan atau data konflik")
+        raise HTTPException(status_code=409, detail="Slug tantangan sudah digunakan atau data konflik")
     except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Gagal memperbarui modul tantangan: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Gagal memperbarui tantangan: {str(e)}")
+
+# Alias route untuk PUT /zones/{id}
+@router.put("/zones/{id}", response_model=ChallengeResponse, include_in_schema=False)
+def update_zone_alias(id: uuid.UUID, payload: ChallengeUpdate, db: Session = Depends(get_db), admin: User = Depends(get_current_admin)):
+    return update_challenge(id=id, payload=payload, db=db, admin=admin)
 
 
-@router.delete("/zones/{id}")
-def delete_zone(id: uuid.UUID, db: Session = Depends(get_db), admin: User = Depends(get_current_admin)):
-    zone = db.query(Zone).filter(Zone.id == id).first()
-    if not zone:
-        raise HTTPException(status_code=404, detail="Modul tantangan tidak ditemukan")
+@router.delete("/challenges/{id}")
+def delete_challenge(id: uuid.UUID, db: Session = Depends(get_db), admin: User = Depends(get_current_admin)):
+    challenge = db.query(Challenge).filter(Challenge.id == id).first()
+    if not challenge:
+        raise HTTPException(status_code=404, detail="Tantangan tidak ditemukan")
     try:
-        name = zone.name
-        db.delete(zone)
+        name = challenge.name
+        db.delete(challenge)
         db.commit()
-        return {"message": f"Modul '{name}' berhasil dihapus"}
+        return {"message": f"Tantangan '{name}' berhasil dihapus"}
     except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Gagal menghapus modul tantangan: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Gagal menghapus tantangan: {str(e)}")
+
+# Alias route untuk DELETE /zones/{id}
+@router.delete("/zones/{id}", include_in_schema=False)
+def delete_zone_alias(id: uuid.UUID, db: Session = Depends(get_db), admin: User = Depends(get_current_admin)):
+    return delete_challenge(id=id, db=db, admin=admin)
 
 
 # =========================================================================
 # 📬 3. MODERASI USULAN RISET PENGUNJUNG
 # =========================================================================
 
-@router.get("/suggestions", response_model=List[SuggestionResponse])
-def get_all_suggestions(
+@router.get("/suggestions", response_model=List[SuggestionAdminResponse])
+def list_suggestions(
     status: Optional[str] = None,
-    limit: int = Query(50, le=200),
+    limit: int = 50,
     offset: int = 0,
     db: Session = Depends(get_db),
     admin: User = Depends(get_current_admin)
 ):
     query = db.query(ResearchSuggestion).options(
-        joinedload(ResearchSuggestion.persona),
-        joinedload(ResearchSuggestion.zone)
+        joinedload(ResearchSuggestion.personas),
+        joinedload(ResearchSuggestion.challenges)
     )
-    if status and status != 'ALL':
+    if status and status.upper() != "ALL":
         query = query.filter(ResearchSuggestion.status == status.upper())
     
     rows = query.order_by(ResearchSuggestion.created_at.desc()).offset(offset).limit(limit).all()
     return [
         {
             "id": r.id,
-            "visitor_name": r.visitor_name,
-            "age_range": r.age_range,
-            "topic_wanted": r.topic_wanted,
-            "feedback": r.feedback,
-            "persona_id": r.persona_id,
-            "persona_name": r.persona.name if r.persona else None,
-            "zone_id": r.zone_id,
-            "zone_name": r.zone.name if r.zone else None,
-            "screen_context": r.screen_context,
+            "title": r.title,
+            "deskripsi": r.deskripsi,
+            "persona_ids": [p.id for p in r.personas],
+            "challange_ids": [c.id for c in r.challenges],
+            "persona_name": ", ".join(p.name for p in r.personas) if r.personas else "-",
+            "challenge_name": ", ".join(c.name for c in r.challenges) if r.challenges else "-",
+            "zone_name": ", ".join(c.name for c in r.challenges) if r.challenges else "-",
+            "topic_wanted": r.title,
+            "feedback": r.deskripsi,
             "status": r.status,
             "admin_notes": r.admin_notes,
             "created_at": r.created_at,
@@ -306,7 +334,7 @@ def get_all_suggestions(
     ]
 
 
-@router.patch("/suggestions/{suggestion_id}/status", response_model=SuggestionResponse)
+@router.patch("/suggestions/{suggestion_id}/status", response_model=SuggestionAdminResponse)
 def update_suggestion_status(
     suggestion_id: uuid.UUID,
     payload: SuggestionStatusUpdate,
@@ -314,8 +342,8 @@ def update_suggestion_status(
     admin: User = Depends(get_current_admin)
 ):
     suggestion = db.query(ResearchSuggestion).options(
-        joinedload(ResearchSuggestion.persona),
-        joinedload(ResearchSuggestion.zone)
+        joinedload(ResearchSuggestion.personas),
+        joinedload(ResearchSuggestion.challenges)
     ).filter(ResearchSuggestion.id == suggestion_id).first()
     
     if not suggestion:
@@ -329,15 +357,15 @@ def update_suggestion_status(
     db.refresh(suggestion)
     return {
         "id": suggestion.id,
-        "visitor_name": suggestion.visitor_name,
-        "age_range": suggestion.age_range,
-        "topic_wanted": suggestion.topic_wanted,
-        "feedback": suggestion.feedback,
-        "persona_id": suggestion.persona_id,
-        "persona_name": suggestion.persona.name if suggestion.persona else None,
-        "zone_id": suggestion.zone_id,
-        "zone_name": suggestion.zone.name if suggestion.zone else None,
-        "screen_context": suggestion.screen_context,
+        "title": suggestion.title,
+        "deskripsi": suggestion.deskripsi,
+        "persona_ids": [p.id for p in suggestion.personas],
+        "challange_ids": [c.id for c in suggestion.challenges],
+        "persona_name": ", ".join(p.name for p in suggestion.personas) if suggestion.personas else "-",
+        "challenge_name": ", ".join(c.name for c in suggestion.challenges) if suggestion.challenges else "-",
+        "zone_name": ", ".join(c.name for c in suggestion.challenges) if suggestion.challenges else "-",
+        "topic_wanted": suggestion.title,
+        "feedback": suggestion.deskripsi,
         "status": suggestion.status,
         "admin_notes": suggestion.admin_notes,
         "created_at": suggestion.created_at,
@@ -390,74 +418,139 @@ def bulk_delete_suggestions(payload: BulkDeleteRequest, db: Session = Depends(ge
 
 
 # =========================================================================
-# 💡 4. INOVASI CRUD (PENDUKUNG KATALOG)
+# 💡 4. SOLUSI CRUD (SOLUTIONS / DAFTAR SOLUSI)
 # =========================================================================
 
-@router.get("/innovations", response_model=List[InnovationResponse])
-def list_innovations(
+@router.get("/solutions", response_model=List[SolutionResponse])
+def list_solutions(
+    challenge_id: Optional[uuid.UUID] = None,
     zone_id: Optional[uuid.UUID] = None,
     limit: int = 100,
     offset: int = 0,
     db: Session = Depends(get_db),
     admin: User = Depends(get_current_admin)
 ):
-    query = db.query(Innovation).options(joinedload(Innovation.zone), joinedload(Innovation.persona))
-    if zone_id:
-        query = query.filter(Innovation.zone_id == zone_id)
-    return query.order_by(Innovation.created_at.asc()).offset(offset).limit(limit).all()
+    eff_challenge_id = challenge_id or zone_id
+    query = db.query(Solution).options(
+        joinedload(Solution.challenge),
+        joinedload(Solution.relevant_challenges),
+        joinedload(Solution.personas),
+        joinedload(Solution.persona)
+    )
+    if eff_challenge_id:
+        query = query.filter(Solution.challenge_id == eff_challenge_id)
+    return query.order_by(Solution.card_no.asc().nullslast(), Solution.created_at.asc()).offset(offset).limit(limit).all()
+
+# Alias route untuk /innovations
+@router.get("/innovations", response_model=List[SolutionResponse], include_in_schema=False)
+def list_innovations_alias(
+    zone_id: Optional[uuid.UUID] = None,
+    challenge_id: Optional[uuid.UUID] = None,
+    limit: int = 100,
+    offset: int = 0,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin)
+):
+    return list_solutions(challenge_id=challenge_id, zone_id=zone_id, limit=limit, offset=offset, db=db, admin=admin)
 
 
-@router.post("/innovations", response_model=InnovationResponse, status_code=status.HTTP_201_CREATED)
-def create_innovation(payload: InnovationCreate, db: Session = Depends(get_db), admin: User = Depends(get_current_admin)):
-    existing = db.query(Innovation).filter(Innovation.slug == payload.slug).first()
+@router.post("/solutions", response_model=SolutionResponse, status_code=status.HTTP_201_CREATED)
+def create_solution(payload: SolutionCreate, db: Session = Depends(get_db), admin: User = Depends(get_current_admin)):
+    existing = db.query(Solution).filter(Solution.slug == payload.slug).first()
     if existing:
-        raise HTTPException(status_code=409, detail="Slug inovasi sudah digunakan")
+        raise HTTPException(status_code=409, detail="Slug solusi sudah digunakan")
     
     try:
-        inno = Innovation(**payload.model_dump())
-        db.add(inno)
+        sol_data = payload.model_dump(exclude={"relevant_challenge_ids", "relevant_zone_ids", "persona_ids"})
+        # Map challenge_id jika menggunakan zone_id
+        if "zone_id" in sol_data and "challenge_id" not in sol_data:
+            sol_data["challenge_id"] = sol_data.pop("zone_id")
+        
+        sol = Solution(**sol_data)
+
+        # Hubungkan M2M Tantangan Relevan
+        rel_ids = payload.relevant_challenge_ids or getattr(payload, 'relevant_zone_ids', None)
+        if rel_ids:
+            sol.relevant_challenges = db.query(Challenge).filter(Challenge.id.in_(rel_ids)).all()
+
+        # Hubungkan M2M Kategori Peran
+        if payload.persona_ids:
+            sol.personas = db.query(Persona).filter(Persona.id.in_(payload.persona_ids)).all()
+            if not sol.persona_id and len(sol.personas) > 0:
+                sol.persona_id = sol.personas[0].id
+
+        db.add(sol)
         db.commit()
-        db.refresh(inno)
-        return inno
+        db.refresh(sol)
+        return sol
     except IntegrityError:
         db.rollback()
-        raise HTTPException(status_code=409, detail="Slug inovasi sudah digunakan atau data konflik")
+        raise HTTPException(status_code=409, detail="Slug solusi sudah digunakan atau data konflik")
     except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Gagal menyimpan inovasi: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Gagal menyimpan solusi: {str(e)}")
+
+# Alias route untuk POST /innovations
+@router.post("/innovations", response_model=SolutionResponse, status_code=status.HTTP_201_CREATED, include_in_schema=False)
+def create_innovation_alias(payload: SolutionCreate, db: Session = Depends(get_db), admin: User = Depends(get_current_admin)):
+    return create_solution(payload=payload, db=db, admin=admin)
 
 
-@router.put("/innovations/{id}", response_model=InnovationResponse)
-def update_innovation(id: uuid.UUID, payload: InnovationUpdate, db: Session = Depends(get_db), admin: User = Depends(get_current_admin)):
-    inno = db.query(Innovation).filter(Innovation.id == id).first()
-    if not inno:
-        raise HTTPException(status_code=404, detail="Inovasi tidak ditemukan")
-    if payload.slug and payload.slug != inno.slug:
-        existing = db.query(Innovation).filter(Innovation.slug == payload.slug, Innovation.id != id).first()
+@router.put("/solutions/{id}", response_model=SolutionResponse)
+def update_solution(id: uuid.UUID, payload: SolutionUpdate, db: Session = Depends(get_db), admin: User = Depends(get_current_admin)):
+    sol = db.query(Solution).filter(Solution.id == id).first()
+    if not sol:
+        raise HTTPException(status_code=404, detail="Solusi tidak ditemukan")
+    if payload.slug and payload.slug != sol.slug:
+        existing = db.query(Solution).filter(Solution.slug == payload.slug, Solution.id != id).first()
         if existing:
-            raise HTTPException(status_code=409, detail="Slug inovasi sudah digunakan")
+            raise HTTPException(status_code=409, detail="Slug solusi sudah digunakan")
     try:
-        for key, val in payload.model_dump(exclude_unset=True).items():
-            setattr(inno, key, val)
+        update_data = payload.model_dump(exclude_unset=True, exclude={"relevant_challenge_ids", "relevant_zone_ids", "persona_ids"})
+        if "zone_id" in update_data and "challenge_id" not in update_data:
+            update_data["challenge_id"] = update_data.pop("zone_id")
+
+        for key, val in update_data.items():
+            setattr(sol, key, val)
+
+        rel_ids = payload.relevant_challenge_ids or getattr(payload, 'relevant_zone_ids', None)
+        if rel_ids is not None:
+            sol.relevant_challenges = db.query(Challenge).filter(Challenge.id.in_(rel_ids)).all()
+
+        if payload.persona_ids is not None:
+            sol.personas = db.query(Persona).filter(Persona.id.in_(payload.persona_ids)).all()
+            if sol.personas:
+                sol.persona_id = sol.personas[0].id
+
         db.commit()
-        db.refresh(inno)
-        return inno
+        db.refresh(sol)
+        return sol
     except IntegrityError:
         db.rollback()
-        raise HTTPException(status_code=409, detail="Slug inovasi sudah digunakan atau data konflik")
+        raise HTTPException(status_code=409, detail="Slug solusi sudah digunakan atau data konflik")
     except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Gagal memperbarui inovasi: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Gagal memperbarui solusi: {str(e)}")
+
+# Alias route untuk PUT /innovations/{id}
+@router.put("/innovations/{id}", response_model=SolutionResponse, include_in_schema=False)
+def update_innovation_alias(id: uuid.UUID, payload: SolutionUpdate, db: Session = Depends(get_db), admin: User = Depends(get_current_admin)):
+    return update_solution(id=id, payload=payload, db=db, admin=admin)
 
 
-@router.delete("/innovations/{id}")
-def delete_innovation(id: uuid.UUID, db: Session = Depends(get_db), admin: User = Depends(get_current_admin)):
-    inno = db.query(Innovation).filter(Innovation.id == id).first()
-    if not inno:
-        raise HTTPException(status_code=404, detail="Inovasi tidak ditemukan")
-    db.delete(inno)
+@router.delete("/solutions/{id}")
+def delete_solution(id: uuid.UUID, db: Session = Depends(get_db), admin: User = Depends(get_current_admin)):
+    sol = db.query(Solution).filter(Solution.id == id).first()
+    if not sol:
+        raise HTTPException(status_code=404, detail="Solusi tidak ditemukan")
+    db.delete(sol)
     db.commit()
-    return {"message": "Inovasi berhasil dihapus"}
+    return {"message": "Solusi berhasil dihapus"}
+
+# Alias route untuk DELETE /innovations/{id}
+@router.delete("/innovations/{id}", include_in_schema=False)
+def delete_innovation_alias(id: uuid.UUID, db: Session = Depends(get_db), admin: User = Depends(get_current_admin)):
+    return delete_solution(id=id, db=db, admin=admin)
 
 
 # =========================================================================
@@ -466,29 +559,29 @@ def delete_innovation(id: uuid.UUID, db: Session = Depends(get_db), admin: User 
 
 @router.get("/analytics", response_model=DashboardAnalyticsResponse)
 def get_analytics(db: Session = Depends(get_db), admin: User = Depends(get_current_admin)):
-    total_inno = db.query(func.count(Innovation.id)).scalar() or 0
+    total_sol = db.query(func.count(Solution.id)).scalar() or 0
     total_personas = db.query(func.count(Persona.id)).scalar() or 0
-    total_zones = db.query(func.count(Zone.id)).scalar() or 0
+    total_challenges = db.query(func.count(Challenge.id)).scalar() or 0
     total_sugg = db.query(func.count(ResearchSuggestion.id)).scalar() or 0
     new_sugg = db.query(func.count(ResearchSuggestion.id)).filter(ResearchSuggestion.status == "NEW").scalar() or 0
     rev_sugg = db.query(func.count(ResearchSuggestion.id)).filter(ResearchSuggestion.status == "REVIEWED").scalar() or 0
 
-    trl_res = db.query(Innovation.trl, func.count(Innovation.id)).group_by(Innovation.trl).all()
+    trl_res = db.query(Solution.trl, func.count(Solution.id)).group_by(Solution.trl).all()
     trl_dist = {f"TRL {row[0]}": row[1] for row in trl_res}
 
-    tz_res = (
-        db.query(Zone.name, func.count(ResearchSuggestion.id))
-        .join(ResearchSuggestion, Zone.id == ResearchSuggestion.zone_id, isouter=True)
-        .group_by(Zone.id, Zone.name)
+    tc_res = (
+        db.query(Challenge.name, func.count(ResearchSuggestion.id))
+        .join(Challenge.suggestions, isouter=True)
+        .group_by(Challenge.id, Challenge.name)
         .order_by(func.count(ResearchSuggestion.id).desc())
         .limit(5)
         .all()
     )
-    top_zones = [{"zone": r[0], "count": r[1]} for r in tz_res]
+    top_zones = [{"zone": r[0], "challenge": r[0], "count": r[1]} for r in tc_res]
 
     tp_res = (
         db.query(Persona.name, func.count(ResearchSuggestion.id))
-        .join(ResearchSuggestion, Persona.id == ResearchSuggestion.persona_id, isouter=True)
+        .join(Persona.suggestions, isouter=True)
         .group_by(Persona.id, Persona.name)
         .order_by(func.count(ResearchSuggestion.id).desc())
         .limit(5)
@@ -497,9 +590,11 @@ def get_analytics(db: Session = Depends(get_db), admin: User = Depends(get_curre
     top_personas = [{"persona": r[0], "count": r[1]} for r in tp_res]
 
     return {
-        "total_innovations": total_inno,
+        "total_innovations": total_sol,
+        "total_solutions": total_sol,
         "total_personas": total_personas,
-        "total_zones": total_zones,
+        "total_zones": total_challenges,
+        "total_challenges": total_challenges,
         "total_suggestions": total_sugg,
         "new_suggestions": new_sugg,
         "reviewed_suggestions": rev_sugg,
@@ -507,7 +602,6 @@ def get_analytics(db: Session = Depends(get_db), admin: User = Depends(get_curre
         "top_personas": top_personas,
         "trl_distribution": trl_dist
     }
-
 
 
 # =========================================================================
@@ -523,13 +617,11 @@ def upload_file(file: UploadFile = File(...), admin: User = Depends(get_current_
     if not file.filename:
         raise HTTPException(status_code=422, detail="Tidak ada file yang dipilih")
     
-    # Generate unique filename
     ext = os.path.splitext(file.filename)[1]
     unique_filename = f"{uuid.uuid4().hex}{ext}"
     
     file_path = os.path.join(UPLOADS_DIR, unique_filename)
     
-    # Save the file
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
         

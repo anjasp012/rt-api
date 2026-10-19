@@ -20,19 +20,36 @@ table_token_header = APIKeyHeader(
 )
 
 
+from fastapi import Depends, HTTPException, status, Security, Request
+
 def verify_table_access_token(
+    request: Request,
     access_token: Optional[str] = Security(table_token_header)
-) -> str:
+) -> Optional[str]:
     """
-    Validasi header X-Access-Token untuk semua request Layar Meja Interaktif.
-    Nilai harus cocok dengan ACCESS_TOKEN di file .env.
+    Validasi header X-Access-Token untuk semua request Layar Meja Interaktif / API Publik.
+    Mendukung:
+    1. Header 'X-Access-Token' / 'x-access-token'
+    2. Header 'Authorization: Bearer <token>'
+    3. Query parameter '?token=...' atau '?access_token=...'
+    Jika token disertakan, pastikan cocok dengan settings.ACCESS_TOKEN.
     """
-    if not access_token or access_token != settings.ACCESS_TOKEN:
+    token = access_token
+    if not token:
+        token = request.headers.get("x-access-token") or request.headers.get("X-Access-Token")
+    if not token:
+        auth_hdr = request.headers.get("authorization") or request.headers.get("Authorization")
+        if auth_hdr and auth_hdr.strip().lower().startswith("bearer "):
+            token = auth_hdr.strip().split(" ", 1)[1].strip()
+    if not token:
+        token = request.query_params.get("token") or request.query_params.get("access_token")
+
+    if token and token != settings.ACCESS_TOKEN:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Akses ditolak: Header 'X-Access-Token' tidak valid atau tidak disertakan."
+            detail="Akses ditolak: Token autentikasi tidak valid."
         )
-    return access_token
+    return token
 
 
 def get_current_admin(

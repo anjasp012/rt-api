@@ -17,9 +17,10 @@ with engine.connect() as conn:
 
     # Known tables that SHOULD exist
     keep = {
-        'users', 'personas', 'zones', 'innovations',
-        'innovation_persona_relevances', 'research_suggestions',
-        'telemetry_logs'
+        'users', 'personas', 'challenges', 'solutions',
+        'solution_relevant_challenges', 'solution_personas',
+        'solution_persona_relevances', 'research_suggestions',
+        'suggestion_personas', 'suggestion_challenges'
     }
 
     orphans = [t for t in existing if t not in keep]

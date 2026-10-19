@@ -11,11 +11,18 @@ api_router.include_router(
     tags=["Authentication"]
 )
 
-# 🖥️ Interactive Table (Membutuhkan header X-Access-Token dari .env)
+# 🖥️ Interactive Table / Public API (personas, challanges, solutions, solution/{id}, suggestion)
+api_router.include_router(
+    table.router,
+    tags=["Public Table API"],
+    dependencies=[Depends(verify_table_access_token)]
+)
+
+# Backward-compatibility alias with /table prefix
 api_router.include_router(
     table.router,
     prefix="/table",
-    tags=["Interactive Table (Public)"],
+    include_in_schema=False,
     dependencies=[Depends(verify_table_access_token)]
 )
 
