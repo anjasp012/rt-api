@@ -125,6 +125,8 @@ def _get_explore_cards(
             "slug": it.slug,
             "title": it.title,
             "summary": it.summary,
+            "year": it.year,
+            "publication_media": it.publication_media,
             "question": it.question,
             "introduction": it.introduction,
             "challenge_name": it.challenge_name,
@@ -156,6 +158,7 @@ def get_challenges(db: Session = Depends(get_db)):
 # =========================================================================
 
 @router.get("/solutions", response_model=List[SolutionExploreCard], summary="Daftar Solusi Riset")
+@router.get("/solution", response_model=List[SolutionExploreCard], include_in_schema=False)
 @router.get("/explore", response_model=List[SolutionExploreCard], include_in_schema=False)
 def get_solutions(
     persona_id: Optional[uuid.UUID] = Query(None, description="ID Peran (Slot 1)"),
