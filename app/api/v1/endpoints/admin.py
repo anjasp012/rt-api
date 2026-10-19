@@ -54,7 +54,6 @@ def get_module_usage_history(db: Session = Depends(get_db), admin: User = Depend
             "slug": p.slug,
             "tagline": p.tagline,
             "icon": getattr(p, 'icon', None),
-            "icon_url": build_full_url(p.icon_url),
             "is_active": p.is_active,
             "usage_count": total_usage,
             "suggestion_count": s_count
@@ -73,7 +72,6 @@ def get_module_usage_history(db: Session = Depends(get_db), admin: User = Depend
             "color": c.color,
             "icon": c.icon,
             "description": c.description,
-            "icon_url": build_full_url(c.icon_url),
             "is_active": c.is_active,
             "usage_count": total_usage,
             "suggestion_count": s_count

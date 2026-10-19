@@ -14,7 +14,6 @@ class Challenge(Base):
     color = Column(String(50), nullable=True)        # Warna bidang / tantangan (e.g. "#996A12")
     icon = Column(String(100), nullable=True)        # Ikon tantangan (e.g. "rice", "cow")
     description = Column(Text, nullable=True)
-    icon_url = Column(String(500), nullable=True)
 
     is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

@@ -13,7 +13,6 @@ class Persona(Base):
     slug = Column(String(150), unique=True, index=True, nullable=False)
     tagline = Column(Text, nullable=True)
     icon = Column(String(100), nullable=True)
-    icon_url = Column(String(500), nullable=True)
 
     is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

@@ -80,88 +80,77 @@ def seed_database():
                 "slug": "pangan-pertanian",
                 "color": "#996A12",
                 "icon": "rice",
-                "description": "Ketahanan pangan, pertanian presisi, peternakan, budidaya perikanan, dan teknologi pascapanen.",
-                "icon_url": "sprout"
+                "description": "Ketahanan pangan, pertanian presisi, peternakan, budidaya perikanan, dan teknologi pascapanen."
             },
             {
                 "name": "Kesehatan & Obat",
                 "slug": "kesehatan-obat",
                 "color": "#B23A48",
                 "icon": "heart-pulse",
-                "description": "Kemandirian farmasi, fitofarmaka, alat kesehatan diagnostik, dan bioteknologi medis.",
-                "icon_url": "heart-pulse"
+                "description": "Kemandirian farmasi, fitofarmaka, alat kesehatan diagnostik, dan bioteknologi medis."
             },
             {
                 "name": "Hayati & Lingkungan",
                 "slug": "hayati-lingkungan",
                 "color": "#2F7D4A",
                 "icon": "leaf",
-                "description": "Konservasi keanekaragaman hayati nusantara, pengelolaan persampahan, dan mitigasi perubahan iklim.",
-                "icon_url": "leaf"
+                "description": "Konservasi keanekaragaman hayati nusantara, pengelolaan persampahan, dan mitigasi perubahan iklim."
             },
             {
                 "name": "Bumi, Laut & Kebencanaan",
                 "slug": "bumi-laut-kebencanaan",
                 "color": "#7A5A3A",
                 "icon": "terrain",
-                "description": "Mitigasi gempa, tsunami, vulkanologi, hidrometeorologi, dan ketahanan iklim maritim.",
-                "icon_url": "terrain"
+                "description": "Mitigasi gempa, tsunami, vulkanologi, hidrometeorologi, dan ketahanan iklim maritim."
             },
             {
                 "name": "Elektronika, Data & AI",
                 "slug": "elektronika-data-ai",
                 "color": "#1D5FA6",
                 "icon": "chip",
-                "description": "Kecerdasan buatan, komputasi awan, semikonduktor, telekomunikasi satelit, dan keamanan siber.",
-                "icon_url": "chip"
+                "description": "Kecerdasan buatan, komputasi awan, semikonduktor, telekomunikasi satelit, dan keamanan siber."
             },
             {
                 "name": "Material, Kimia & Manufaktur",
                 "slug": "material-kimia-manufaktur",
                 "color": "#6B5BA8",
                 "icon": "hexagon-multiple-outline",
-                "description": "Teknologi polimer ramah lingkungan, katalis kimia industri, nano-material, dan metalurgi pertahanan.",
-                "icon_url": "hexagon-multiple-outline"
+                "description": "Teknologi polimer ramah lingkungan, katalis kimia industri, nano-material, dan metalurgi pertahanan."
             },
             {
                 "name": "Energi",
                 "slug": "energi",
                 "color": "#B05E16",
                 "icon": "lightning-bolt-outline",
-                "description": "Transisi energi baru terbarukan, baterai kendaraan listrik, sel surya, dan hidrogen hijau.",
-                "icon_url": "lightning-bolt-outline"
+                "description": "Transisi energi baru terbarukan, baterai kendaraan listrik, sel surya, dan hidrogen hijau."
             },
             {
                 "name": "Nuklir",
                 "slug": "nuklir",
                 "color": "#5A7419",
                 "icon": "atom",
-                "description": "Radioisotop medis/radiofarmaka, pemuliaan mutasi tanaman, dan keselamatan fasilitas reaktor nuklir.",
-                "icon_url": "atom"
+                "description": "Radioisotop medis/radiofarmaka, pemuliaan mutasi tanaman, dan keselamatan fasilitas reaktor nuklir."
             },
             {
                 "name": "Transportasi & Antariksa",
                 "slug": "transportasi-antariksa",
                 "color": "#3A4FA0",
                 "icon": "rocket-launch-outline",
-                "description": "Teknologi satelit orbit rendah, wahana tanpa awak (drone), dan keselamatan perkapalan.",
-                "icon_url": "rocket-launch-outline"
+                "description": "Teknologi satelit orbit rendah, wahana tanpa awak (drone), dan keselamatan perkapalan."
             },
             {
                 "name": "Sosial, Ekonomi & Pemerintahan",
                 "slug": "sosial-ekonomi-pemerintahan",
                 "color": "#2B7A86",
                 "icon": "account-group-outline",
-                "description": "Pembangunan desa, pengentasan kemiskinan, kebijakan publik, dan inovasi pendidikan.",
-                "icon_url": "account-group-outline"
+                "description": "Pembangunan desa, pengentasan kemiskinan, kebijakan publik, dan inovasi pendidikan."
             },
             {
                 "name": "Budaya, Bahasa & Sejarah",
                 "slug": "budaya-bahasa-sejarah",
                 "color": "#8A3F7A",
                 "icon": "script-text-outline",
-                "description": "Pelestarian bahasa daerah terancam punah, filologi naskah kuno, dan arkeologi prasejarah.",
-                "icon_url": "script-text-outline"
+                "description": "Pelestarian bahasa daerah terancam punah, filologi naskah kuno, dan arkeologi prasejarah."
             }
         ]
 
@@ -178,14 +167,14 @@ def seed_database():
         # 3. Kategori Peran (8 Personas)
         print("[+] Seeding 8 Kategori Peran (Personas)...")
         personas_data = [
-            {"name": "Petani", "slug": "petani", "tagline": "Pelaku utama produksi pangan, perkebunan, dan peternakan.", "icon": "sprout", "icon_url": "sprout"},
-            {"name": "Nelayan", "slug": "nelayan", "tagline": "Penggerak pemanfaatan perikanan tangkap dan budidaya pesisir.", "icon": "fish", "icon_url": "fish"},
-            {"name": "Pelaku Industri", "slug": "pelaku-industri", "tagline": "Penerap inovasi manufaktur, teknologi skala besar, dan daya saing pasar.", "icon": "factory", "icon_url": "factory"},
-            {"name": "Pelaku Usaha", "slug": "pelaku-usaha", "tagline": "Pengusaha, startup, dan UMKM yang mengkomersialkan inovasi.", "icon": "store", "icon_url": "store"},
-            {"name": "Peneliti/Akademisi", "slug": "peneliti-akademisi", "tagline": "Pendorong riset fundamental, kolaborasi riset, dan publikasi ilmiah.", "icon": "microscope", "icon_url": "microscope"},
-            {"name": "Pemerintah", "slug": "pemerintah", "tagline": "Pembuat kebijakan, regulator, dan pengambil keputusan strategis.", "icon": "building-columns", "icon_url": "building-columns"},
-            {"name": "Siswa/Mahasiswa", "slug": "siswa-mahasiswa", "tagline": "Generasi muda pembelajar dan agen masa depan teknologi.", "icon": "graduation-cap", "icon_url": "graduation-cap"},
-            {"name": "Masyarakat Umum", "slug": "masyarakat-umum", "tagline": "Penerima manfaat langsung solusi dan teknologi BRIN.", "icon": "users", "icon_url": "users"},
+            {"name": "Petani", "slug": "petani", "tagline": "Pelaku utama produksi pangan, perkebunan, dan peternakan.", "icon": "sprout"},
+            {"name": "Nelayan", "slug": "nelayan", "tagline": "Penggerak pemanfaatan perikanan tangkap dan budidaya pesisir.", "icon": "fish"},
+            {"name": "Pelaku Industri", "slug": "pelaku-industri", "tagline": "Penerap inovasi manufaktur, teknologi skala besar, dan daya saing pasar.", "icon": "factory"},
+            {"name": "Pelaku Usaha", "slug": "pelaku-usaha", "tagline": "Pengusaha, startup, dan UMKM yang mengkomersialkan inovasi.", "icon": "store"},
+            {"name": "Peneliti/Akademisi", "slug": "peneliti-akademisi", "tagline": "Pendorong riset fundamental, kolaborasi riset, dan publikasi ilmiah.", "icon": "microscope"},
+            {"name": "Pemerintah", "slug": "pemerintah", "tagline": "Pembuat kebijakan, regulator, dan pengambil keputusan strategis.", "icon": "building-columns"},
+            {"name": "Siswa/Mahasiswa", "slug": "siswa-mahasiswa", "tagline": "Generasi muda pembelajar dan agen masa depan teknologi.", "icon": "graduation-cap"},
+            {"name": "Masyarakat Umum", "slug": "masyarakat-umum", "tagline": "Penerima manfaat langsung solusi dan teknologi BRIN.", "icon": "users"},
         ]
 
         persona_map = {}
