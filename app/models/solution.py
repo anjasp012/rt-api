@@ -76,13 +76,6 @@ class Solution(Base):
     fun_fact_source = Column(String(255), nullable=True)             # Sumber "Tahukah kamu?"
     fun_fact_url = Column(Text, nullable=True)                       # Tautan sumber
 
-    # 7. Informasi pendukung meja interaktif
-    short_description = Column(Text, nullable=True)
-    impact = Column(Text, nullable=True)
-    thumbnail_url = Column(String(500), nullable=True)
-    implementation_potential = Column(JSON, default=list, nullable=True)
-    relevant_tags = Column(JSON, default=list, nullable=True)
-    media_gallery = Column(JSON, default=list, nullable=True)
 
     is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

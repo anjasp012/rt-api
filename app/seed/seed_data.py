@@ -312,8 +312,6 @@ def seed_database():
                 fun_fact=fun_fact,
                 fun_fact_source=fun_fact_src,
                 fun_fact_url=fun_fact_url,
-                short_description=summary,
-                impact=summary,
                 is_active=True
             )
 

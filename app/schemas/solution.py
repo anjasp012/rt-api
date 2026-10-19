@@ -1,10 +1,9 @@
 import uuid
 from typing import Optional, List
-from pydantic import BaseModel, Field, AliasChoices, field_validator
+from pydantic import BaseModel, Field, AliasChoices
 from datetime import datetime
 from app.schemas.challenge import ChallengeResponse, ZoneResponse
 from app.schemas.persona import PersonaResponse
-from app.core.helpers import build_full_url, build_full_url_list
 
 
 class SolutionBase(BaseModel):
@@ -51,13 +50,6 @@ class SolutionBase(BaseModel):
     fun_fact_source: Optional[str] = None
     fun_fact_url: Optional[str] = None
 
-    # 7. Informasi pendukung
-    short_description: Optional[str] = None
-    impact: Optional[str] = None
-    thumbnail_url: Optional[str] = None
-    implementation_potential: Optional[List[str]] = None
-    relevant_tags: Optional[List[str]] = None
-    media_gallery: Optional[List[str]] = None
     is_active: bool = True
 
     # Backward compatibility
@@ -107,12 +99,6 @@ class SolutionUpdate(BaseModel):
     fun_fact_source: Optional[str] = None
     fun_fact_url: Optional[str] = None
 
-    short_description: Optional[str] = None
-    impact: Optional[str] = None
-    thumbnail_url: Optional[str] = None
-    implementation_potential: Optional[List[str]] = None
-    relevant_tags: Optional[List[str]] = None
-    media_gallery: Optional[List[str]] = None
     is_active: Optional[bool] = None
 
 
@@ -149,16 +135,6 @@ class SolutionResponse(SolutionBase):
     zone_name: Optional[str] = None
     relevant_zones: Optional[List[ZoneResponse]] = []
     relevant_zone_names: Optional[List[str]] = []
-
-    @field_validator("thumbnail_url", mode="after")
-    @classmethod
-    def format_thumbnail_url(cls, v: Optional[str]) -> Optional[str]:
-        return build_full_url(v)
-
-    @field_validator("media_gallery", mode="after")
-    @classmethod
-    def format_media_gallery(cls, v: Optional[List[str]]) -> List[str]:
-        return build_full_url_list(v)
 
     class Config:
         from_attributes = True
