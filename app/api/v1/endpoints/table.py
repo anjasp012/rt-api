@@ -126,6 +126,8 @@ def _get_explore_cards(
             "slug": it.slug,
             "title": it.title,
             "summary": it.summary,
+            "year": it.year,
+            "publication_media": it.publication_media,
             "question": it.question,
             "introduction": it.introduction,
             "challenge_name": it.challenge_name,
