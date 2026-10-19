@@ -124,23 +124,12 @@ def _get_explore_cards(
         cards.append({
             "id": it.id,
             "slug": it.slug,
-            "judul_asli": it.title,
-            "ringkasan": it.summary,
-            "aspek": it.aspect,
-            "tahun": it.year,
-            "writer": it.writer,
-            "publication_media": it.publication_media,
-            "research_center": it.research_center,
-            "satker": it.satker,
-            "author": it.author,
-            "media_publikasi": it.media_publikasi,
-            "pertanyaan": it.question,
-            "pengantar": it.introduction,
+            "title": it.title,
+            "summary": it.summary,
+            "question": it.question,
+            "introduction": it.introduction,
             "challenge_name": it.challenge_name,
-            "challange_name": it.challenge_name,
-            "nama_challenge": it.challenge_name,
             "persona_name": it.persona_name,
-            "nama_persona": it.persona_name,
         })
     return cards
 
@@ -240,34 +229,31 @@ def get_solution_detail(identifier: str, db: Session = Depends(get_db)):
     if not solution:
         raise HTTPException(status_code=404, detail="Solusi riset tidak ditemukan")
 
-    bidang_relevan = [c.name for c in solution.relevant_challenges] if solution.relevant_challenges else []
-    if not bidang_relevan and solution.challenge:
-        bidang_relevan = [solution.challenge.name]
+    relevant_challenges = [c.name for c in solution.relevant_challenges] if solution.relevant_challenges else []
+    if not relevant_challenges and solution.challenge:
+        relevant_challenges = [solution.challenge.name]
 
-    persona_list = [p.name for p in solution.personas] if solution.personas else []
-    if not persona_list and solution.persona:
-        persona_list = [solution.persona.name]
+    personas = [p.name for p in solution.personas] if solution.personas else []
+    if not personas and solution.persona:
+        personas = [solution.persona.name]
 
     return {
         "id": solution.id,
         "title": solution.title,
-        "aspek": solution.aspect,
         "summary": solution.summary,
-        "writter": solution.writer,
+        "aspect": solution.aspect,
+        "writer": solution.writer,
         "year": solution.year,
         "research_center": solution.research_center,
         "publication_media": solution.publication_media,
         "abstract_url": solution.abstract_url,
-        "jurnal_publication": solution.journal_publication,
-        "bidang_relevan": bidang_relevan,
-        "persona": persona_list,
+        "journal_publication": solution.journal_publication,
+        "question": solution.question,
+        "introduction": solution.introduction,
         "challenge_name": solution.challenge_name,
-        "challange_name": solution.challenge_name,
-        "nama_challenge": solution.challenge_name,
         "persona_name": solution.persona_name,
-        "nama_persona": solution.persona_name,
-        "pertanyaan": solution.question,
-        "pengantar": solution.introduction
+        "relevant_challenges": relevant_challenges,
+        "personas": personas,
     }
 
 

@@ -169,23 +169,12 @@ class SolutionResponse(SolutionBase):
 class SolutionExploreCard(BaseModel):
     id: uuid.UUID
     slug: str
-    judul_asli: str = Field(..., validation_alias=AliasChoices('judul_asli', 'title'))
-    ringkasan: Optional[str] = Field(None, validation_alias=AliasChoices('ringkasan', 'summary'))
-    aspek: Optional[str] = Field(None, validation_alias=AliasChoices('aspek', 'aspect'))
-    tahun: Optional[int] = Field(None, validation_alias=AliasChoices('tahun', 'year'))
-    writer: Optional[str] = Field(None, validation_alias=AliasChoices('writer', 'writter', 'author', 'penulis'))
-    publication_media: Optional[str] = Field(None, validation_alias=AliasChoices('publication_media', 'media_publikasi'))
-    research_center: Optional[str] = Field(None, validation_alias=AliasChoices('research_center', 'satker', 'research_unit'))
-    satker: Optional[str] = None
-    author: Optional[str] = None
-    media_publikasi: Optional[str] = None
-    pertanyaan: Optional[str] = Field(None, validation_alias=AliasChoices('pertanyaan', 'question'))
-    pengantar: Optional[str] = Field(None, validation_alias=AliasChoices('pengantar', 'introduction'))
+    title: str = Field(..., validation_alias=AliasChoices('title', 'judul_asli'))
+    summary: Optional[str] = Field(None, validation_alias=AliasChoices('summary', 'ringkasan'))
+    question: Optional[str] = Field(None, validation_alias=AliasChoices('question', 'pertanyaan'))
+    introduction: Optional[str] = Field(None, validation_alias=AliasChoices('introduction', 'pengantar'))
     challenge_name: Optional[str] = Field(None, validation_alias=AliasChoices('challenge_name', 'challange_name', 'nama_challenge', 'nama_challange'))
-    challange_name: Optional[str] = Field(None, validation_alias=AliasChoices('challange_name', 'challenge_name', 'nama_challange', 'nama_challenge'))
     persona_name: Optional[str] = Field(None, validation_alias=AliasChoices('persona_name', 'nama_persona'))
-    nama_challenge: Optional[str] = Field(None, validation_alias=AliasChoices('nama_challenge', 'nama_challange', 'challenge_name', 'challange_name'))
-    nama_persona: Optional[str] = Field(None, validation_alias=AliasChoices('nama_persona', 'persona_name'))
 
     class Config:
         from_attributes = True
@@ -196,22 +185,19 @@ class SolutionDetailResponse(BaseModel):
     id: uuid.UUID
     title: str = Field(..., validation_alias=AliasChoices('title', 'judul_asli'))
     summary: Optional[str] = Field(None, validation_alias=AliasChoices('summary', 'ringkasan'))
-    aspek: Optional[str] = Field(None, validation_alias=AliasChoices('aspek', 'aspect'))
-    writter: Optional[str] = Field(None, validation_alias=AliasChoices('writter', 'writer', 'author', 'penulis'))
+    aspect: Optional[str] = Field(None, validation_alias=AliasChoices('aspect', 'aspek'))
+    writer: Optional[str] = Field(None, validation_alias=AliasChoices('writer', 'writter', 'author', 'penulis'))
     year: Optional[int] = Field(None, validation_alias=AliasChoices('year', 'tahun'))
-    research_center: Optional[str] = Field(None, validation_alias=AliasChoices('research_center', 'satker'))
+    research_center: Optional[str] = Field(None, validation_alias=AliasChoices('research_center', 'satker', 'research_unit'))
     publication_media: Optional[str] = Field(None, validation_alias=AliasChoices('publication_media', 'media_publikasi'))
     abstract_url: Optional[str] = None
-    jurnal_publication: Optional[str] = Field(None, validation_alias=AliasChoices('jurnal_publication', 'journal_publication'))
-    bidang_relevan: List[str] = Field(default_factory=list, validation_alias=AliasChoices('bidang_relevan', 'relevant_challenges', 'relevant_challenge_names'))
-    persona: List[str] = Field(default_factory=list, validation_alias=AliasChoices('persona', 'personas', 'persona_names', 'persona_list'))
+    journal_publication: Optional[str] = Field(None, validation_alias=AliasChoices('journal_publication', 'jurnal_publication'))
+    question: Optional[str] = Field(None, validation_alias=AliasChoices('question', 'pertanyaan'))
+    introduction: Optional[str] = Field(None, validation_alias=AliasChoices('introduction', 'pengantar'))
     challenge_name: Optional[str] = Field(None, validation_alias=AliasChoices('challenge_name', 'challange_name', 'nama_challenge', 'nama_challange'))
-    challange_name: Optional[str] = Field(None, validation_alias=AliasChoices('challange_name', 'challenge_name', 'nama_challange', 'nama_challenge'))
     persona_name: Optional[str] = Field(None, validation_alias=AliasChoices('persona_name', 'nama_persona'))
-    nama_challenge: Optional[str] = Field(None, validation_alias=AliasChoices('nama_challenge', 'nama_challange', 'challenge_name', 'challange_name'))
-    nama_persona: Optional[str] = Field(None, validation_alias=AliasChoices('nama_persona', 'persona_name'))
-    pertanyaan: Optional[str] = Field(None, validation_alias=AliasChoices('pertanyaan', 'question'))
-    pengantar: Optional[str] = Field(None, validation_alias=AliasChoices('pengantar', 'introduction'))
+    relevant_challenges: List[str] = Field(default_factory=list, validation_alias=AliasChoices('relevant_challenges', 'bidang_relevan', 'relevant_challenge_names'))
+    personas: List[str] = Field(default_factory=list, validation_alias=AliasChoices('personas', 'persona', 'persona_names', 'persona_list'))
 
     class Config:
         from_attributes = True
