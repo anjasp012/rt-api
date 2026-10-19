@@ -52,7 +52,6 @@ class SolutionBase(BaseModel):
     fun_fact_url: Optional[str] = None
 
     # 7. Informasi pendukung
-    trl: int = 7
     short_description: Optional[str] = None
     impact: Optional[str] = None
     thumbnail_url: Optional[str] = None
@@ -108,7 +107,6 @@ class SolutionUpdate(BaseModel):
     fun_fact_source: Optional[str] = None
     fun_fact_url: Optional[str] = None
 
-    trl: Optional[int] = None
     short_description: Optional[str] = None
     impact: Optional[str] = None
     thumbnail_url: Optional[str] = None
@@ -171,8 +169,6 @@ class SolutionExploreCard(BaseModel):
     slug: str
     title: str = Field(..., validation_alias=AliasChoices('title', 'judul_asli'))
     summary: Optional[str] = Field(None, validation_alias=AliasChoices('summary', 'ringkasan'))
-    year: Optional[int] = Field(None, validation_alias=AliasChoices('year', 'tahun'))
-    publication_media: Optional[str] = Field(None, validation_alias=AliasChoices('publication_media', 'media_publikasi'))
     question: Optional[str] = Field(None, validation_alias=AliasChoices('question', 'pertanyaan'))
     introduction: Optional[str] = Field(None, validation_alias=AliasChoices('introduction', 'pengantar'))
     challenge_name: Optional[str] = Field(None, validation_alias=AliasChoices('challenge_name', 'challange_name', 'nama_challenge', 'nama_challange'))

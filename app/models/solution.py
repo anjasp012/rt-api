@@ -77,7 +77,6 @@ class Solution(Base):
     fun_fact_url = Column(Text, nullable=True)                       # Tautan sumber
 
     # 7. Informasi pendukung meja interaktif
-    trl = Column(Integer, default=7, nullable=False)
     short_description = Column(Text, nullable=True)
     impact = Column(Text, nullable=True)
     thumbnail_url = Column(String(500), nullable=True)

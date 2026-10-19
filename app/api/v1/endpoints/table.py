@@ -109,12 +109,11 @@ def _get_explore_cards(
 
         scored_items.append((relevance_score, item))
 
-    # Urutkan berdasarkan relevansi tertinggi, lalu tahun terbaru, lalu TRL tertinggi
+    # Urutkan berdasarkan relevansi tertinggi, lalu tahun terbaru
     scored_items.sort(
         key=lambda x: (
             x[0],
-            x[1].year or 0,
-            x[1].trl or 0
+            x[1].year or 0
         ),
         reverse=True
     )
@@ -126,8 +125,6 @@ def _get_explore_cards(
             "slug": it.slug,
             "title": it.title,
             "summary": it.summary,
-            "year": it.year,
-            "publication_media": it.publication_media,
             "question": it.question,
             "introduction": it.introduction,
             "challenge_name": it.challenge_name,

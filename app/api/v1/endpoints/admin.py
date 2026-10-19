@@ -565,9 +565,7 @@ def get_analytics(db: Session = Depends(get_db), admin: User = Depends(get_curre
     total_sugg = db.query(func.count(ResearchSuggestion.id)).scalar() or 0
     new_sugg = db.query(func.count(ResearchSuggestion.id)).filter(ResearchSuggestion.status == "NEW").scalar() or 0
     rev_sugg = db.query(func.count(ResearchSuggestion.id)).filter(ResearchSuggestion.status == "REVIEWED").scalar() or 0
-
-    trl_res = db.query(Solution.trl, func.count(Solution.id)).group_by(Solution.trl).all()
-    trl_dist = {f"TRL {row[0]}": row[1] for row in trl_res}
+    trl_dist = {}
 
     tc_res = (
         db.query(Challenge.name, func.count(ResearchSuggestion.id))

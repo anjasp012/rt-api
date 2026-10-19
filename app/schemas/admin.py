@@ -24,4 +24,4 @@ class DashboardAnalyticsResponse(BaseModel):
     reviewed_suggestions: int
     top_zones: List[Dict[str, Any]]
     top_personas: List[Dict[str, Any]]
-    trl_distribution: Dict[str, int]
+    trl_distribution: Optional[Dict[str, int]] = {}
