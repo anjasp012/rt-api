@@ -36,7 +36,9 @@ def slugify(text: str) -> str:
 def seed_database():
     print("[+] Hapus SEMUA data dan tabel di database (clean reset)...")
     with engine.connect() as conn:
-        conn.execute(text("DROP SCHEMA public CASCADE; CREATE SCHEMA public;"))
+        tables = conn.execute(text("SELECT tablename FROM pg_tables WHERE schemaname = 'public';")).fetchall()
+        for (t_name,) in tables:
+            conn.execute(text(f'DROP TABLE IF EXISTS "{t_name}" CASCADE;'))
         conn.commit()
     Base.metadata.create_all(bind=engine)
     print("[+] Seluruh tabel database (challenges, solutions, personas) berhasil dibuat ulang dari nol!")
