@@ -16,6 +16,7 @@ from app.models.suggestion import (
     suggestion_personas,
     suggestion_challenges
 )
+from app.models.interaction import ModuleInteractionLog
 
 __all__ = [
     "Base",
@@ -34,4 +35,5 @@ __all__ = [
     "ResearchSuggestion",
     "suggestion_personas",
     "suggestion_challenges",
+    "ModuleInteractionLog",
 ]

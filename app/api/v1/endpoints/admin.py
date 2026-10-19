@@ -6,6 +6,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status, UploadFile
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func, desc
 from sqlalchemy.exc import IntegrityError
+from collections import defaultdict
+from datetime import datetime
 from app.db.session import get_db
 from app.models.user import User
 from app.models.persona import Persona
@@ -13,6 +15,7 @@ from app.models.challenge import Challenge, Zone
 from app.models.solution import Solution, Innovation
 from app.models.relevance import SolutionPersonaRelevance, InnovationPersonaRelevance
 from app.models.suggestion import ResearchSuggestion
+from app.models.interaction import ModuleInteractionLog
 from app.schemas.persona import PersonaCreate, PersonaUpdate, PersonaResponse
 from app.schemas.challenge import ChallengeCreate, ChallengeUpdate, ChallengeResponse, ZoneCreate, ZoneUpdate, ZoneResponse
 from app.schemas.solution import (
@@ -42,9 +45,10 @@ def get_module_usage_history(db: Session = Depends(get_db), admin: User = Depend
     personas = db.query(Persona).order_by(Persona.created_at.asc()).all()
     challenges = db.query(Challenge).order_by(Challenge.created_at.asc()).all()
 
-    # Hitung pemakaian peran dari usulan
+    # Hitung pemakaian peran murni dari interaksi meja sentuh (GET /solutions)
     persona_stats = []
     for p in personas:
+        p_interactive = db.query(func.count(ModuleInteractionLog.id)).filter(ModuleInteractionLog.persona_id == p.id).scalar() or 0
         s_count = db.query(func.count(ResearchSuggestion.id)).join(ResearchSuggestion.personas).filter(Persona.id == p.id).scalar() or 0
         sol_count = len(p.solutions) if hasattr(p, 'solutions') and p.solutions else 0
         persona_stats.append({
@@ -54,15 +58,17 @@ def get_module_usage_history(db: Session = Depends(get_db), admin: User = Depend
             "tagline": p.tagline,
             "icon": getattr(p, 'icon', None),
             "is_active": p.is_active,
-            "usage_count": s_count,
+            "usage_count": p_interactive,
+            "interactive_count": p_interactive,
             "suggestion_count": s_count,
             "solution_count": sol_count,
             "solutions_count": sol_count
         })
 
-    # Hitung pemakaian tantangan dari usulan
+    # Hitung pemakaian tantangan murni dari interaksi meja sentuh (GET /solutions)
     challenge_stats = []
     for c in challenges:
+        c_interactive = db.query(func.count(ModuleInteractionLog.id)).filter(ModuleInteractionLog.challenge_id == c.id).scalar() or 0
         s_count = db.query(func.count(ResearchSuggestion.id)).join(ResearchSuggestion.challenges).filter(Challenge.id == c.id).scalar() or 0
         sol_count = db.query(func.count(Solution.id)).filter(Solution.challenge_id == c.id).scalar() or 0
         challenge_stats.append({
@@ -73,28 +79,41 @@ def get_module_usage_history(db: Session = Depends(get_db), admin: User = Depend
             "icon": c.icon,
             "description": c.description,
             "is_active": c.is_active,
-            "usage_count": s_count,
+            "usage_count": c_interactive,
+            "interactive_count": c_interactive,
             "suggestion_count": s_count,
             "solution_count": sol_count,
             "solutions_count": sol_count
         })
 
-    # Kombinasi paling sering dimainkan (Peran + Tantangan)
-    comb_suggestions = (
-        db.query(Persona.name, Challenge.name, func.count(ResearchSuggestion.id))
-        .join(ResearchSuggestion.personas)
-        .join(ResearchSuggestion.challenges)
+    # Kombinasi paling sering dimainkan (Peran + Tantangan) murni dari interaksi meja sentuh (GET /solutions)
+    comb_interactions = (
+        db.query(Persona.name, Challenge.name, func.count(ModuleInteractionLog.id))
+        .join(Persona, ModuleInteractionLog.persona_id == Persona.id)
+        .join(Challenge, ModuleInteractionLog.challenge_id == Challenge.id)
         .group_by(Persona.name, Challenge.name)
-        .order_by(func.count(ResearchSuggestion.id).desc())
+        .order_by(func.count(ModuleInteractionLog.id).desc())
         .limit(10)
         .all()
     )
     top_combinations = [
         {"persona": row[0], "zone": row[1], "challenge": row[1], "count": row[2]}
-        for row in comb_suggestions
+        for row in comb_interactions
     ]
 
-    # Log aktivitas usulan terbaru
+    # Log aktivitas interaksi terkini (Meja Sentuh & Usulan Riset)
+    recent_interactions = (
+        db.query(ModuleInteractionLog)
+        .options(
+            joinedload(ModuleInteractionLog.persona),
+            joinedload(ModuleInteractionLog.challenge),
+            joinedload(ModuleInteractionLog.solution)
+        )
+        .order_by(ModuleInteractionLog.created_at.desc())
+        .limit(25)
+        .all()
+    )
+
     recent_suggestions = (
         db.query(ResearchSuggestion)
         .options(
@@ -106,6 +125,55 @@ def get_module_usage_history(db: Session = Depends(get_db), admin: User = Depend
         .all()
     )
 
+    logs_list = []
+    for log in recent_interactions:
+        event_name = log.event or ("DETAIL" if log.solution_id else "EXPLORE")
+        sol_title = log.solution_title
+        if event_name == "DETAIL" and sol_title:
+            desc_text = f"Melihat Detail: {sol_title}"
+        elif log.persona_name and log.challenge_name:
+            desc_text = f"Eksplorasi Kombinasi: {log.persona_name} + {log.challenge_name}"
+        else:
+            desc_text = "Eksplorasi Solusi Meja Sentuh"
+
+        logs_list.append({
+            "id": log.id,
+            "event": event_name,
+            "persona_id": log.persona_id,
+            "persona": log.persona_name or "-",
+            "zone_id": log.challenge_id,
+            "zone": log.challenge_name or "-",
+            "challenge_id": log.challenge_id,
+            "challenge": log.challenge_name or "-",
+            "solution_id": log.solution_id,
+            "solution_title": sol_title,
+            "innovation_title": sol_title,
+            "description": desc_text,
+            "keterangan": desc_text,
+            "created_at": log.created_at
+        })
+
+    for s in recent_suggestions:
+        logs_list.append({
+            "id": s.id,
+            "event": "SUGGESTION",
+            "persona_id": s.persona_id,
+            "persona": s.persona_name or "-",
+            "zone_id": s.challenge_id,
+            "zone": s.challenge_name or "-",
+            "challenge_id": s.challenge_id,
+            "challenge": s.challenge_name or "-",
+            "solution_id": None,
+            "solution_title": None,
+            "description": s.title,
+            "keterangan": s.deskripsi or s.title,
+            "created_at": s.created_at
+        })
+
+    logs_list.sort(key=lambda x: x["created_at"] or datetime.min, reverse=True)
+    recent_logs = logs_list[:25]
+
+    total_interactive = db.query(func.count(ModuleInteractionLog.id)).scalar() or 0
     total_suggestions = db.query(func.count(ResearchSuggestion.id)).scalar() or 0
 
     return {
@@ -113,31 +181,14 @@ def get_module_usage_history(db: Session = Depends(get_db), admin: User = Depend
             "total_persona_types": len(personas),
             "total_zone_types": len(challenges),
             "total_challenge_types": len(challenges),
-            "total_interactive_plays": total_suggestions,
+            "total_interactive_plays": total_interactive,
             "total_suggestions_submitted": total_suggestions
         },
         "persona_stats": sorted(persona_stats, key=lambda x: (x["usage_count"], x["solution_count"]), reverse=True),
         "zone_stats": sorted(challenge_stats, key=lambda x: (x["usage_count"], x["solution_count"]), reverse=True),
         "challenge_stats": sorted(challenge_stats, key=lambda x: (x["usage_count"], x["solution_count"]), reverse=True),
         "top_combinations": top_combinations,
-        "recent_logs": [
-            {
-                "id": s.id,
-                "event": "SUGGESTION",
-                "persona_id": s.persona_id,
-                "persona": s.persona_name or "-",
-                "zone_id": s.challenge_id,
-                "zone": s.challenge_name or "-",
-                "challenge_id": s.challenge_id,
-                "challenge": s.challenge_name or "-",
-                "solution_id": None,
-                "solution_title": None,
-                "description": s.title,
-                "keterangan": s.deskripsi or s.title,
-                "created_at": s.created_at
-            }
-            for s in recent_suggestions
-        ]
+        "recent_logs": recent_logs
     }
 
 

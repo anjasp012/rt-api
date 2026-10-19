@@ -8,6 +8,7 @@ from app.models.persona import Persona
 from app.models.challenge import Challenge, Zone
 from app.models.solution import Solution, Innovation
 from app.models.suggestion import ResearchSuggestion
+from app.models.interaction import ModuleInteractionLog
 from app.schemas.persona import PersonaResponse
 from app.schemas.challenge import ChallengeResponse, ZoneResponse
 from app.schemas.solution import (
@@ -37,16 +38,39 @@ def _get_explore_cards(
     Helper internal untuk mengambil, memfilter, & menghitung skor relevansi solusi riset.
     """
     resolved_persona_id = persona_id if isinstance(persona_id, uuid.UUID) else None
+    if not resolved_persona_id and persona_id and isinstance(persona_id, str):
+        try:
+            resolved_persona_id = uuid.UUID(persona_id.strip())
+        except ValueError:
+            pass
     if not resolved_persona_id and isinstance(persona_slug, str) and persona_slug.strip():
         p = db.query(Persona.id).filter(Persona.slug == persona_slug.strip()).first()
         if p:
             resolved_persona_id = p[0]
 
     resolved_challenge_id = challenge_id if isinstance(challenge_id, uuid.UUID) else None
+    if not resolved_challenge_id and challenge_id and isinstance(challenge_id, str):
+        try:
+            resolved_challenge_id = uuid.UUID(challenge_id.strip())
+        except ValueError:
+            pass
     if not resolved_challenge_id and isinstance(challenge_slug, str) and challenge_slug.strip():
         c = db.query(Challenge.id).filter(Challenge.slug == challenge_slug.strip()).first()
         if c:
             resolved_challenge_id = c[0]
+
+    # Catat histori interaksi meja sentuh jika peran atau tantangan dipilih
+    if resolved_persona_id or resolved_challenge_id:
+        try:
+            interaction_log = ModuleInteractionLog(
+                persona_id=resolved_persona_id,
+                challenge_id=resolved_challenge_id,
+                event="EXPLORE"
+            )
+            db.add(interaction_log)
+            db.commit()
+        except Exception:
+            db.rollback()
 
     query = db.query(Solution).options(
         joinedload(Solution.challenge),
@@ -169,6 +193,9 @@ def get_solutions(
     challange_slug: Optional[str] = Query(None, description="Alias Slug Tantangan"),
     zone_id: Optional[uuid.UUID] = Query(None, description="Legacy ID Tantangan"),
     zone_slug: Optional[str] = Query(None, description="Legacy Slug Tantangan"),
+    persona_ids: Optional[List[str]] = Query(None, include_in_schema=False),
+    challenge_ids: Optional[List[str]] = Query(None, include_in_schema=False),
+    challange_ids: Optional[List[str]] = Query(None, include_in_schema=False),
     aspect: Optional[str] = Query(None, description="Filter nama aspek riset"),
     search: Optional[str] = Query(None, description="Pencarian kata kunci"),
     limit: Optional[int] = Query(None, ge=1, le=200, description="Batas jumlah hasil"),
@@ -178,12 +205,13 @@ def get_solutions(
     Mengambil daftar kartu solusi riset BRIN berdasarkan kombinasi Slot 1 (Peran) dan Slot 2 (Tantangan).
     Hanya mengembalikan 6 field utama: id, slug, judul_asli, ringkasan, aspek, tahun.
     """
-    effective_challenge_id = challenge_id or challange_id or zone_id
+    effective_persona = persona_id or (persona_ids[0] if persona_ids else None)
+    effective_challenge_id = challenge_id or challange_id or zone_id or (challenge_ids[0] if challenge_ids else None) or (challange_ids[0] if challange_ids else None)
     effective_challenge_slug = challenge_slug or challange_slug or zone_slug
 
     cards = _get_explore_cards(
         db=db,
-        persona_id=persona_id,
+        persona_id=effective_persona,
         persona_slug=persona_slug,
         challenge_id=effective_challenge_id,
         challenge_slug=effective_challenge_slug,
@@ -230,6 +258,20 @@ def get_solution_detail(identifier: str, db: Session = Depends(get_db)):
 
     if not solution:
         raise HTTPException(status_code=404, detail="Solusi riset tidak ditemukan")
+
+    # Catat histori interaksi meja sentuh saat melihat detail solusi
+    try:
+        sol_persona_id = solution.persona_id or (solution.personas[0].id if solution.personas else None)
+        interaction_log = ModuleInteractionLog(
+            persona_id=sol_persona_id,
+            challenge_id=solution.challenge_id,
+            solution_id=solution.id,
+            event="DETAIL"
+        )
+        db.add(interaction_log)
+        db.commit()
+    except Exception:
+        db.rollback()
 
     relevant_challenges = [c.name for c in solution.relevant_challenges] if solution.relevant_challenges else []
     if not relevant_challenges and solution.challenge:
