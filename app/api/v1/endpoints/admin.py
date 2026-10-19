@@ -48,7 +48,10 @@ def get_module_usage_history(db: Session = Depends(get_db), admin: User = Depend
     # Hitung pemakaian peran murni dari interaksi meja sentuh (GET /solutions)
     persona_stats = []
     for p in personas:
-        p_interactive = db.query(func.count(ModuleInteractionLog.id)).filter(ModuleInteractionLog.persona_id == p.id).scalar() or 0
+        p_interactive = db.query(func.count(ModuleInteractionLog.id)).filter(
+            ModuleInteractionLog.persona_id == p.id,
+            ModuleInteractionLog.event == "EXPLORE"
+        ).scalar() or 0
         s_count = db.query(func.count(ResearchSuggestion.id)).join(ResearchSuggestion.personas).filter(Persona.id == p.id).scalar() or 0
         sol_count = len(p.solutions) if hasattr(p, 'solutions') and p.solutions else 0
         persona_stats.append({
@@ -68,7 +71,10 @@ def get_module_usage_history(db: Session = Depends(get_db), admin: User = Depend
     # Hitung pemakaian tantangan murni dari interaksi meja sentuh (GET /solutions)
     challenge_stats = []
     for c in challenges:
-        c_interactive = db.query(func.count(ModuleInteractionLog.id)).filter(ModuleInteractionLog.challenge_id == c.id).scalar() or 0
+        c_interactive = db.query(func.count(ModuleInteractionLog.id)).filter(
+            ModuleInteractionLog.challenge_id == c.id,
+            ModuleInteractionLog.event == "EXPLORE"
+        ).scalar() or 0
         s_count = db.query(func.count(ResearchSuggestion.id)).join(ResearchSuggestion.challenges).filter(Challenge.id == c.id).scalar() or 0
         sol_count = db.query(func.count(Solution.id)).filter(Solution.challenge_id == c.id).scalar() or 0
         challenge_stats.append({
@@ -91,6 +97,7 @@ def get_module_usage_history(db: Session = Depends(get_db), admin: User = Depend
         db.query(Persona.name, Challenge.name, func.count(ModuleInteractionLog.id))
         .join(Persona, ModuleInteractionLog.persona_id == Persona.id)
         .join(Challenge, ModuleInteractionLog.challenge_id == Challenge.id)
+        .filter(ModuleInteractionLog.event == "EXPLORE")
         .group_by(Persona.name, Challenge.name)
         .order_by(func.count(ModuleInteractionLog.id).desc())
         .limit(10)
@@ -173,7 +180,7 @@ def get_module_usage_history(db: Session = Depends(get_db), admin: User = Depend
     logs_list.sort(key=lambda x: x["created_at"] or datetime.min, reverse=True)
     recent_logs = logs_list[:25]
 
-    total_interactive = db.query(func.count(ModuleInteractionLog.id)).scalar() or 0
+    total_interactive = db.query(func.count(ModuleInteractionLog.id)).filter(ModuleInteractionLog.event == "EXPLORE").scalar() or 0
     total_suggestions = db.query(func.count(ResearchSuggestion.id)).scalar() or 0
 
     return {
