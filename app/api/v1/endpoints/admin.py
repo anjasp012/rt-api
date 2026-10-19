@@ -47,7 +47,6 @@ def get_module_usage_history(db: Session = Depends(get_db), admin: User = Depend
     for p in personas:
         s_count = db.query(func.count(ResearchSuggestion.id)).join(ResearchSuggestion.personas).filter(Persona.id == p.id).scalar() or 0
         sol_count = len(p.solutions) if hasattr(p, 'solutions') and p.solutions else 0
-        total_usage = s_count + sol_count
         persona_stats.append({
             "id": p.id,
             "name": p.name,
@@ -55,8 +54,10 @@ def get_module_usage_history(db: Session = Depends(get_db), admin: User = Depend
             "tagline": p.tagline,
             "icon": getattr(p, 'icon', None),
             "is_active": p.is_active,
-            "usage_count": total_usage,
-            "suggestion_count": s_count
+            "usage_count": s_count,
+            "suggestion_count": s_count,
+            "solution_count": sol_count,
+            "solutions_count": sol_count
         })
 
     # Hitung pemakaian tantangan dari usulan
@@ -64,7 +65,6 @@ def get_module_usage_history(db: Session = Depends(get_db), admin: User = Depend
     for c in challenges:
         s_count = db.query(func.count(ResearchSuggestion.id)).join(ResearchSuggestion.challenges).filter(Challenge.id == c.id).scalar() or 0
         sol_count = db.query(func.count(Solution.id)).filter(Solution.challenge_id == c.id).scalar() or 0
-        total_usage = s_count + sol_count
         challenge_stats.append({
             "id": c.id,
             "name": c.name,
@@ -73,8 +73,10 @@ def get_module_usage_history(db: Session = Depends(get_db), admin: User = Depend
             "icon": c.icon,
             "description": c.description,
             "is_active": c.is_active,
-            "usage_count": total_usage,
-            "suggestion_count": s_count
+            "usage_count": s_count,
+            "suggestion_count": s_count,
+            "solution_count": sol_count,
+            "solutions_count": sol_count
         })
 
     # Kombinasi paling sering dimainkan (Peran + Tantangan)
@@ -114,9 +116,9 @@ def get_module_usage_history(db: Session = Depends(get_db), admin: User = Depend
             "total_interactive_plays": total_suggestions,
             "total_suggestions_submitted": total_suggestions
         },
-        "persona_stats": sorted(persona_stats, key=lambda x: x["usage_count"], reverse=True),
-        "zone_stats": sorted(challenge_stats, key=lambda x: x["usage_count"], reverse=True),
-        "challenge_stats": sorted(challenge_stats, key=lambda x: x["usage_count"], reverse=True),
+        "persona_stats": sorted(persona_stats, key=lambda x: (x["usage_count"], x["solution_count"]), reverse=True),
+        "zone_stats": sorted(challenge_stats, key=lambda x: (x["usage_count"], x["solution_count"]), reverse=True),
+        "challenge_stats": sorted(challenge_stats, key=lambda x: (x["usage_count"], x["solution_count"]), reverse=True),
         "top_combinations": top_combinations,
         "recent_logs": [
             {
