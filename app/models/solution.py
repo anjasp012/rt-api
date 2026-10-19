@@ -148,6 +148,20 @@ class Solution(Base):
     def persona_ids(self):
         return [p.id for p in self.personas] if self.personas else []
 
+    @property
+    def bidang_relevan(self):
+        names = [c.name for c in self.relevant_challenges] if self.relevant_challenges else []
+        if not names and self.challenge:
+            names = [self.challenge.name]
+        return names
+
+    @property
+    def persona_list(self):
+        names = [p.name for p in self.personas] if self.personas else []
+        if not names and self.persona:
+            names = [self.persona.name]
+        return names
+
     # Indonesian alias properties
     @property
     def judul_asli(self):

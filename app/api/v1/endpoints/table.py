@@ -205,10 +205,15 @@ def get_solutions(
 @router.get("/innovations/{identifier}", response_model=SolutionDetailResponse, include_in_schema=False)
 def get_solution_detail(identifier: str, db: Session = Depends(get_db)):
     """
-    Mengambil detail solusi riset spesifik (hanya 9 field: id, title, summary, writter, year, research_center, publication_media, abstract_url, jurnal_publication).
+    Mengambil detail solusi riset spesifik (11 field: id, title, summary, writter, year, research_center, publication_media, abstract_url, jurnal_publication, bidang_relevan, persona).
     Bisa dicari berdasarkan UUID, ID Publikasi (misal P10212), atau Slug.
     """
-    query = db.query(Solution)
+    query = db.query(Solution).options(
+        joinedload(Solution.challenge),
+        joinedload(Solution.relevant_challenges),
+        joinedload(Solution.personas),
+        joinedload(Solution.persona)
+    )
 
     solution = None
     # 1. Coba sebagai UUID
@@ -229,6 +234,14 @@ def get_solution_detail(identifier: str, db: Session = Depends(get_db)):
     if not solution:
         raise HTTPException(status_code=404, detail="Solusi riset tidak ditemukan")
 
+    bidang_relevan = [c.name for c in solution.relevant_challenges] if solution.relevant_challenges else []
+    if not bidang_relevan and solution.challenge:
+        bidang_relevan = [solution.challenge.name]
+
+    persona_list = [p.name for p in solution.personas] if solution.personas else []
+    if not persona_list and solution.persona:
+        persona_list = [solution.persona.name]
+
     return {
         "id": solution.id,
         "title": solution.title,
@@ -238,7 +251,9 @@ def get_solution_detail(identifier: str, db: Session = Depends(get_db)):
         "research_center": solution.research_center,
         "publication_media": solution.publication_media,
         "abstract_url": solution.abstract_url,
-        "jurnal_publication": solution.journal_publication
+        "jurnal_publication": solution.journal_publication,
+        "bidang_relevan": bidang_relevan,
+        "persona": persona_list
     }
 
 

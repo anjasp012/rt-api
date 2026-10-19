@@ -194,6 +194,8 @@ class SolutionDetailResponse(BaseModel):
     publication_media: Optional[str] = Field(None, validation_alias=AliasChoices('publication_media', 'media_publikasi'))
     abstract_url: Optional[str] = None
     jurnal_publication: Optional[str] = Field(None, validation_alias=AliasChoices('jurnal_publication', 'journal_publication'))
+    bidang_relevan: List[str] = Field(default_factory=list, validation_alias=AliasChoices('bidang_relevan', 'relevant_challenges', 'relevant_challenge_names'))
+    persona: List[str] = Field(default_factory=list, validation_alias=AliasChoices('persona', 'personas', 'persona_names', 'persona_list'))
 
     class Config:
         from_attributes = True
