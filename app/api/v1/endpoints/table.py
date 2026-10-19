@@ -1,5 +1,5 @@
 import uuid
-from typing import List, Optional, Union, Any
+from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import or_, func
@@ -24,38 +24,30 @@ from app.core.helpers import build_full_url
 router = APIRouter()
 
 
-def _parse_uuids(val: Any) -> List[uuid.UUID]:
-    if not val or hasattr(val, "default"):
-        return []
-    if isinstance(val, uuid.UUID):
-        return [val]
-    if isinstance(val, str):
-        val = [val]
-    parsed = []
-    if isinstance(val, (list, tuple, set)):
-        for item in val:
-            if isinstance(item, uuid.UUID):
-                parsed.append(item)
-            elif isinstance(item, str):
-                for part in item.split(","):
-                    part_clean = part.strip()
-                    if part_clean:
-                        try:
-                            parsed.append(uuid.UUID(part_clean))
-                        except ValueError:
-                            pass
-    return list(dict.fromkeys(parsed))
-
-
 def _get_explore_cards(
     db: Session,
-    persona_ids: Optional[List[uuid.UUID]] = None,
-    challange_ids: Optional[List[uuid.UUID]] = None,
+    persona_id: Optional[uuid.UUID] = None,
+    persona_slug: Optional[str] = None,
+    challenge_id: Optional[uuid.UUID] = None,
+    challenge_slug: Optional[str] = None,
+    aspect: Optional[str] = None,
     search: Optional[str] = None
 ) -> List[dict]:
     """
     Helper internal untuk mengambil, memfilter, & menghitung skor relevansi solusi riset.
     """
+    resolved_persona_id = persona_id if isinstance(persona_id, uuid.UUID) else None
+    if not resolved_persona_id and isinstance(persona_slug, str) and persona_slug.strip():
+        p = db.query(Persona.id).filter(Persona.slug == persona_slug.strip()).first()
+        if p:
+            resolved_persona_id = p[0]
+
+    resolved_challenge_id = challenge_id if isinstance(challenge_id, uuid.UUID) else None
+    if not resolved_challenge_id and isinstance(challenge_slug, str) and challenge_slug.strip():
+        c = db.query(Challenge.id).filter(Challenge.slug == challenge_slug.strip()).first()
+        if c:
+            resolved_challenge_id = c[0]
+
     query = db.query(Solution).options(
         joinedload(Solution.challenge),
         joinedload(Solution.relevant_challenges),
@@ -64,11 +56,15 @@ def _get_explore_cards(
     ).filter(Solution.is_active == True)
 
     # Filter berdasarkan Tantangan / Bidang (Utama atau Tantangan Relevan M2M)
-    if challange_ids:
+    if resolved_challenge_id:
         query = query.filter(
-            (Solution.challenge_id.in_(challange_ids)) |
-            (Solution.relevant_challenges.any(Challenge.id.in_(challange_ids)))
+            (Solution.challenge_id == resolved_challenge_id) |
+            (Solution.relevant_challenges.any(Challenge.id == resolved_challenge_id))
         )
+
+    # Filter berdasarkan Aspek riset
+    if isinstance(aspect, str) and aspect.strip():
+        query = query.filter(Solution.aspect.ilike(f"%{aspect.strip()}%"))
 
     # Filter pencarian keyword bebas (Judul, Aspek, ID Publikasi, Pertanyaan, Ringkasan, Tahukah Kamu)
     if isinstance(search, str) and search.strip():
@@ -92,21 +88,22 @@ def _get_explore_cards(
         relevance_score = 0
         is_matched_persona = False
 
-        if persona_ids:
-            is_matched_persona = any(p.id in persona_ids for p in item.personas) or (item.persona_id in persona_ids)
+        if resolved_persona_id:
+            # Cek jika persona ada di daftar Kategori Peran (M2M) atau primary persona_id
+            is_matched_persona = any(p.id == resolved_persona_id for p in item.personas) or (item.persona_id == resolved_persona_id)
             if is_matched_persona:
                 relevance_score += 80
-
-            for pid in persona_ids:
-                rel = next((r for r in item.persona_relevances if r.persona_id == pid), None)
-                if rel:
-                    relevance_score += rel.relevance_score
-            if not is_matched_persona:
+            
+            # Cek jika ada custom weight di relevance mappings
+            rel = next((r for r in item.persona_relevances if r.persona_id == resolved_persona_id), None)
+            if rel:
+                relevance_score += rel.relevance_score
+            elif not is_matched_persona:
                 relevance_score += 10
 
         # Jika kedua modul (Peran & Tantangan) cocok dengan solusi ini, berikan bonus sinergi
-        if persona_ids and challange_ids and is_matched_persona:
-            is_matched_challenge = (item.challenge_id in challange_ids) or any(c.id in challange_ids for c in item.relevant_challenges)
+        if resolved_persona_id and resolved_challenge_id and is_matched_persona:
+            is_matched_challenge = (item.challenge_id == resolved_challenge_id) or any(c.id == resolved_challenge_id for c in item.relevant_challenges)
             if is_matched_challenge:
                 relevance_score += 50
 
@@ -129,8 +126,6 @@ def _get_explore_cards(
             "slug": it.slug,
             "title": it.title,
             "summary": it.summary,
-            "year": it.year,
-            "publication_media": it.publication_media,
             "question": it.question,
             "introduction": it.introduction,
             "challenge_name": it.challenge_name,
@@ -164,30 +159,33 @@ def get_challenges(db: Session = Depends(get_db)):
 @router.get("/solutions", response_model=List[SolutionExploreCard], summary="Daftar Solusi Riset")
 @router.get("/explore", response_model=List[SolutionExploreCard], include_in_schema=False)
 def get_solutions(
-    persona_ids: Optional[List[str]] = Query(None, description="Daftar ID Persona (Slot 1)"),
-    challange_ids: Optional[List[str]] = Query(None, description="Daftar ID Tantangan / Challenge (Slot 2)"),
+    persona_id: Optional[uuid.UUID] = Query(None, description="ID Peran (Slot 1)"),
+    persona_slug: Optional[str] = Query(None, description="Slug Peran"),
+    challenge_id: Optional[uuid.UUID] = Query(None, description="ID Tantangan (Slot 2)"),
+    challenge_slug: Optional[str] = Query(None, description="Slug Tantangan"),
+    challange_id: Optional[uuid.UUID] = Query(None, description="Alias ID Tantangan (Slot 2)"),
+    challange_slug: Optional[str] = Query(None, description="Alias Slug Tantangan"),
+    zone_id: Optional[uuid.UUID] = Query(None, description="Legacy ID Tantangan"),
+    zone_slug: Optional[str] = Query(None, description="Legacy Slug Tantangan"),
+    aspect: Optional[str] = Query(None, description="Filter nama aspek riset"),
     search: Optional[str] = Query(None, description="Pencarian kata kunci"),
     limit: Optional[int] = Query(None, ge=1, le=200, description="Batas jumlah hasil"),
-    challenge_ids: Optional[List[str]] = Query(None, include_in_schema=False),
-    persona_id: Optional[str] = Query(None, include_in_schema=False),
-    challange_id: Optional[str] = Query(None, include_in_schema=False),
-    challenge_id: Optional[str] = Query(None, include_in_schema=False),
     db: Session = Depends(get_db)
 ):
     """
     Mengambil daftar kartu solusi riset BRIN berdasarkan kombinasi Slot 1 (Peran) dan Slot 2 (Tantangan).
-    Query parameters utama: persona_ids dan challange_ids.
+    Hanya mengembalikan 6 field utama: id, slug, judul_asli, ringkasan, aspek, tahun.
     """
-    raw_persona = persona_ids or ([persona_id] if persona_id else None)
-    parsed_persona_ids = _parse_uuids(raw_persona)
-
-    raw_challange = challange_ids or challenge_ids or ([challange_id or challenge_id] if (challange_id or challenge_id) else None)
-    parsed_challenge_ids = _parse_uuids(raw_challange)
+    effective_challenge_id = challenge_id or challange_id or zone_id
+    effective_challenge_slug = challenge_slug or challange_slug or zone_slug
 
     cards = _get_explore_cards(
         db=db,
-        persona_ids=parsed_persona_ids,
-        challange_ids=parsed_challenge_ids,
+        persona_id=persona_id,
+        persona_slug=persona_slug,
+        challenge_id=effective_challenge_id,
+        challenge_slug=effective_challenge_slug,
+        aspect=aspect,
         search=search
     )
 
