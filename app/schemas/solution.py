@@ -36,8 +36,10 @@ class SolutionBase(BaseModel):
     title: str = Field(..., validation_alias=AliasChoices('title', 'judul_asli'))
     slug: str
     year: Optional[int] = Field(None, validation_alias=AliasChoices('year', 'tahun'))
-    research_center: Optional[str] = None
-    journal_publication: Optional[str] = None
+    writer: Optional[str] = Field(None, validation_alias=AliasChoices('writer', 'writter', 'author', 'penulis'))
+    publication_media: Optional[str] = Field(None, validation_alias=AliasChoices('publication_media', 'media_publikasi'))
+    research_center: Optional[str] = Field(None, validation_alias=AliasChoices('research_center', 'satker', 'research_unit'))
+    journal_publication: Optional[str] = Field(None, validation_alias=AliasChoices('journal_publication', 'jurnal_publication'))
     doi: Optional[str] = None
     abstract_url: Optional[str] = None
     access_type: Optional[str] = None
@@ -92,8 +94,10 @@ class SolutionUpdate(BaseModel):
     title: Optional[str] = Field(None, validation_alias=AliasChoices('title', 'judul_asli'))
     slug: Optional[str] = None
     year: Optional[int] = Field(None, validation_alias=AliasChoices('year', 'tahun'))
-    research_center: Optional[str] = None
-    journal_publication: Optional[str] = None
+    writer: Optional[str] = Field(None, validation_alias=AliasChoices('writer', 'writter', 'author', 'penulis'))
+    publication_media: Optional[str] = Field(None, validation_alias=AliasChoices('publication_media', 'media_publikasi'))
+    research_center: Optional[str] = Field(None, validation_alias=AliasChoices('research_center', 'satker', 'research_unit'))
+    journal_publication: Optional[str] = Field(None, validation_alias=AliasChoices('journal_publication', 'jurnal_publication'))
     doi: Optional[str] = None
     abstract_url: Optional[str] = None
     access_type: Optional[str] = None
@@ -139,7 +143,10 @@ class SolutionResponse(SolutionBase):
     persona: Optional[PersonaResponse] = None
     persona_name: Optional[str] = None
 
-    # Backward compatibility zone fields
+    # Backward compatibility zone & alias fields
+    satker: Optional[str] = None
+    author: Optional[str] = None
+    media_publikasi: Optional[str] = None
     zone: Optional[ZoneResponse] = None
     zone_name: Optional[str] = None
     relevant_zones: Optional[List[ZoneResponse]] = []
@@ -166,9 +173,31 @@ class SolutionExploreCard(BaseModel):
     ringkasan: Optional[str] = Field(None, validation_alias=AliasChoices('ringkasan', 'summary'))
     aspek: Optional[str] = Field(None, validation_alias=AliasChoices('aspek', 'aspect'))
     tahun: Optional[int] = Field(None, validation_alias=AliasChoices('tahun', 'year'))
+    writer: Optional[str] = Field(None, validation_alias=AliasChoices('writer', 'writter', 'author', 'penulis'))
+    publication_media: Optional[str] = Field(None, validation_alias=AliasChoices('publication_media', 'media_publikasi'))
+    research_center: Optional[str] = Field(None, validation_alias=AliasChoices('research_center', 'satker', 'research_unit'))
+    satker: Optional[str] = None
+    author: Optional[str] = None
+    media_publikasi: Optional[str] = None
 
     class Config:
         from_attributes = True
+
+
+class SolutionDetailResponse(BaseModel):
+    id: uuid.UUID
+    title: str = Field(..., validation_alias=AliasChoices('title', 'judul_asli'))
+    summary: Optional[str] = Field(None, validation_alias=AliasChoices('summary', 'ringkasan'))
+    writter: Optional[str] = Field(None, validation_alias=AliasChoices('writter', 'writer', 'author', 'penulis'))
+    year: Optional[int] = Field(None, validation_alias=AliasChoices('year', 'tahun'))
+    research_center: Optional[str] = Field(None, validation_alias=AliasChoices('research_center', 'satker'))
+    publication_media: Optional[str] = Field(None, validation_alias=AliasChoices('publication_media', 'media_publikasi'))
+    abstract_url: Optional[str] = None
+    jurnal_publication: Optional[str] = Field(None, validation_alias=AliasChoices('jurnal_publication', 'journal_publication'))
+
+    class Config:
+        from_attributes = True
+        populate_by_name = True
 
 
 # Aliases untuk backward compatibility
@@ -177,3 +206,4 @@ InnovationCreate = SolutionCreate
 InnovationUpdate = SolutionUpdate
 InnovationResponse = SolutionResponse
 InnovationExploreCard = SolutionExploreCard
+InnovationDetailResponse = SolutionDetailResponse

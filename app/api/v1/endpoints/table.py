@@ -13,8 +13,10 @@ from app.schemas.challenge import ChallengeResponse, ZoneResponse
 from app.schemas.solution import (
     SolutionResponse, 
     SolutionExploreCard,
+    SolutionDetailResponse,
     InnovationResponse,
-    InnovationExploreCard
+    InnovationExploreCard,
+    InnovationDetailResponse
 )
 from app.schemas.suggestion import SuggestionCreate, SuggestionResponse
 from app.core.helpers import build_full_url
@@ -124,7 +126,13 @@ def _get_explore_cards(
             "judul_asli": it.title,
             "ringkasan": it.summary,
             "aspek": it.aspect,
-            "tahun": it.year
+            "tahun": it.year,
+            "writer": it.writer,
+            "publication_media": it.publication_media,
+            "research_center": it.research_center,
+            "satker": it.satker,
+            "author": it.author,
+            "media_publikasi": it.media_publikasi,
         }
         for _, it in scored_items
     ]
@@ -192,19 +200,15 @@ def get_solutions(
     return cards
 
 
-@router.get("/solution/{identifier}", response_model=SolutionResponse, summary="Detail Lengkap Solusi Riset")
-@router.get("/solutions/{identifier}", response_model=SolutionResponse, include_in_schema=False)
-@router.get("/innovations/{identifier}", response_model=SolutionResponse, include_in_schema=False)
+@router.get("/solution/{identifier}", response_model=SolutionDetailResponse, summary="Detail Solusi Riset")
+@router.get("/solutions/{identifier}", response_model=SolutionDetailResponse, include_in_schema=False)
+@router.get("/innovations/{identifier}", response_model=SolutionDetailResponse, include_in_schema=False)
 def get_solution_detail(identifier: str, db: Session = Depends(get_db)):
     """
-    Mengambil detail lengkap solusi riset spesifik berdasarkan UUID, ID Publikasi (misal P10212), atau Slug.
+    Mengambil detail solusi riset spesifik (hanya 9 field: id, title, summary, writter, year, research_center, publication_media, abstract_url, jurnal_publication).
+    Bisa dicari berdasarkan UUID, ID Publikasi (misal P10212), atau Slug.
     """
-    query = db.query(Solution).options(
-        joinedload(Solution.challenge),
-        joinedload(Solution.relevant_challenges),
-        joinedload(Solution.personas),
-        joinedload(Solution.persona_relevances)
-    )
+    query = db.query(Solution)
 
     solution = None
     # 1. Coba sebagai UUID
@@ -224,7 +228,18 @@ def get_solution_detail(identifier: str, db: Session = Depends(get_db)):
 
     if not solution:
         raise HTTPException(status_code=404, detail="Solusi riset tidak ditemukan")
-    return solution
+
+    return {
+        "id": solution.id,
+        "title": solution.title,
+        "summary": solution.summary,
+        "writter": solution.writer,
+        "year": solution.year,
+        "research_center": solution.research_center,
+        "publication_media": solution.publication_media,
+        "abstract_url": solution.abstract_url,
+        "jurnal_publication": solution.journal_publication
+    }
 
 
 # =========================================================================

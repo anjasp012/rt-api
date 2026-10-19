@@ -61,8 +61,10 @@ class Solution(Base):
     title = Column(Text, nullable=False, index=True)                 # Judul asli karya ilmiah
     slug = Column(String(255), unique=True, index=True, nullable=False)
     year = Column(Integer, nullable=True)                            # Tahun (e.g. 2025)
+    writer = Column(Text, nullable=True)                             # Penulis / Writer (Author)
+    publication_media = Column(String(255), nullable=True)           # Media Publikasi / Publication Media
     research_center = Column(Text, nullable=True)                    # Pusat riset penulis (bisa multiple dipisah titik koma)
-    journal_publication = Column(String(255), nullable=True)         # Jurnal / terbitan
+    journal_publication = Column(String(255), nullable=True)         # Jurnal / terbitan (legacy alias)
     doi = Column(String(255), nullable=True)                         # DOI
     abstract_url = Column(Text, nullable=True)                       # Halaman abstrak yang dibaca (URL)
     access_type = Column(String(100), nullable=True)                 # Akses (e.g. "Open access (CC BY-SA 4.0)")
@@ -162,6 +164,34 @@ class Solution(Base):
     @property
     def tahun(self):
         return self.year
+
+    @property
+    def writter(self):
+        return self.writer
+
+    @property
+    def author(self):
+        return self.writer
+
+    @property
+    def penulis(self):
+        return self.writer
+
+    @property
+    def media_publikasi(self):
+        return self.publication_media or self.journal_publication
+
+    @property
+    def satker(self):
+        return self.research_center
+
+    @property
+    def research_unit(self):
+        return self.research_center
+
+    @property
+    def jurnal_publication(self):
+        return self.journal_publication
 
     # Legacy zone properties for backward-compatibility
     @property
