@@ -119,8 +119,9 @@ def _get_explore_cards(
         reverse=True
     )
 
-    cards = [
-        {
+    cards = []
+    for _, it in scored_items:
+        cards.append({
             "id": it.id,
             "slug": it.slug,
             "judul_asli": it.title,
@@ -133,9 +134,14 @@ def _get_explore_cards(
             "satker": it.satker,
             "author": it.author,
             "media_publikasi": it.media_publikasi,
-        }
-        for _, it in scored_items
-    ]
+            "pertanyaan": it.question,
+            "pengantar": it.introduction,
+            "challenge_name": it.challenge_name,
+            "challange_name": it.challenge_name,
+            "nama_challenge": it.challenge_name,
+            "persona_name": it.persona_name,
+            "nama_persona": it.persona_name,
+        })
     return cards
 
 
@@ -245,6 +251,7 @@ def get_solution_detail(identifier: str, db: Session = Depends(get_db)):
     return {
         "id": solution.id,
         "title": solution.title,
+        "aspek": solution.aspect,
         "summary": solution.summary,
         "writter": solution.writer,
         "year": solution.year,
@@ -253,7 +260,14 @@ def get_solution_detail(identifier: str, db: Session = Depends(get_db)):
         "abstract_url": solution.abstract_url,
         "jurnal_publication": solution.journal_publication,
         "bidang_relevan": bidang_relevan,
-        "persona": persona_list
+        "persona": persona_list,
+        "challenge_name": solution.challenge_name,
+        "challange_name": solution.challenge_name,
+        "nama_challenge": solution.challenge_name,
+        "persona_name": solution.persona_name,
+        "nama_persona": solution.persona_name,
+        "pertanyaan": solution.question,
+        "pengantar": solution.introduction
     }
 
 

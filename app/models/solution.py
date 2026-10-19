@@ -117,6 +117,18 @@ class Solution(Base):
         return self.challenge.name if self.challenge else None
 
     @property
+    def challange_name(self):
+        return self.challenge_name
+
+    @property
+    def nama_challenge(self):
+        return self.challenge_name
+
+    @property
+    def nama_challange(self):
+        return self.challenge_name
+
+    @property
     def challenge_color(self):
         return self.challenge.color if self.challenge else None
 
@@ -134,11 +146,15 @@ class Solution(Base):
 
     @property
     def persona_name(self):
-        if self.personas and len(self.personas) > 0:
-            return self.personas[0].name
         if self.persona:
             return self.persona.name
+        if self.personas and len(self.personas) > 0:
+            return self.personas[0].name
         return None
+
+    @property
+    def nama_persona(self):
+        return self.persona_name
 
     @property
     def persona_names(self):
@@ -146,7 +162,21 @@ class Solution(Base):
 
     @property
     def persona_ids(self):
-        return [p.id for p in self.personas] if self.personas else []
+        ids = ([self.persona_id] if self.persona_id else []) + [p.id for p in self.personas]
+        return list(dict.fromkeys(ids))
+
+    @property
+    def challange_id(self):
+        return self.challenge_id
+
+    @property
+    def challange_ids(self):
+        ids = ([self.challenge_id] if self.challenge_id else []) + [c.id for c in self.relevant_challenges]
+        return list(dict.fromkeys(ids))
+
+    @property
+    def challenge_ids(self):
+        return self.challange_ids
 
     @property
     def bidang_relevan(self):
@@ -174,6 +204,14 @@ class Solution(Base):
     @property
     def aspek(self):
         return self.aspect
+
+    @property
+    def pertanyaan(self):
+        return self.question
+
+    @property
+    def pengantar(self):
+        return self.introduction
 
     @property
     def tahun(self):
