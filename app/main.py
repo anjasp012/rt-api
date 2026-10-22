@@ -80,7 +80,7 @@ from app.schemas.publication import PublicPublicationOverviewResponse
 def public_publications_root(
     year: Optional[str] = Query(None, description="Filter tahun tertentu, misal 2024 atau ALL"),
     field: Optional[str] = Query(None, description="Filter bidang riset tertentu, misal 'Energi' atau ALL"),
-    include_hamparan: bool = Query(False, description="Sertakan 59.000 titik hamparan boolean (default False agar Swagger UI tidak crash. Set True untuk aplikasi meja/canvas)"),
+    include_hamparan: bool = Query(True, description="Sertakan bitstring status 59.000 titik publikasi ('1'=aktif, '0'=nonaktif). Ukuran hanya ~59 KB, super cepat dan aman di Swagger UI."),
     tahun: Optional[str] = None,
     bidang: Optional[str] = None,
     db: Session = Depends(get_db)
