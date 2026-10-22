@@ -28,6 +28,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*", "X-Total-Count"],
 )
 
 from fastapi.responses import JSONResponse
@@ -67,8 +68,14 @@ from typing import Optional
 from sqlalchemy.orm import Session
 from fastapi import Depends
 from app.db.session import get_db
+from app.schemas.publication import PublicPublicationOverviewResponse
 
-@app.get("/publications", summary="Public Publications Overview (Root Alias)")
+@app.get(
+    "/publications",
+    response_model=PublicPublicationOverviewResponse,
+    summary="Statistik & Hamparan Publikasi Riset BRIN",
+    description="Endpoint publik untuk layar meja interaktif / web publik. Mengembalikan ringkasan angka sekilas riset BRIN dan hamparan status boolean titik publikasi."
+)
 def public_publications_root(
     year: Optional[str] = None,
     field: Optional[str] = None,

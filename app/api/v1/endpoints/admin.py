@@ -6,11 +6,12 @@ import csv
 import json
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
-from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query, status, UploadFile, File, Form
+import math
+from typing import List, Optional, Union
+from fastapi import APIRouter, Depends, HTTPException, Query, status, UploadFile, File, Form, Response
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import func, desc, cast, Text
+from sqlalchemy import func, desc, cast, Text, or_
 from sqlalchemy.exc import IntegrityError
 from collections import defaultdict
 from datetime import datetime
@@ -23,7 +24,10 @@ from app.models.relevance import SolutionPersonaRelevance, InnovationPersonaRele
 from app.models.suggestion import ResearchSuggestion
 from app.models.interaction import ModuleInteractionLog
 from app.models.publication import Publication
-from app.schemas.publication import PublicationCreate, PublicationUpdate, PublicationResponse
+from app.schemas.publication import (
+    PublicationCreate, PublicationUpdate, PublicationResponse,
+    PublicationPaginationResponse, PublicationFilterOptionsResponse
+)
 from app.schemas.persona import PersonaCreate, PersonaUpdate, PersonaResponse
 from app.schemas.challenge import ChallengeCreate, ChallengeUpdate, ChallengeResponse, ZoneCreate, ZoneUpdate, ZoneResponse
 from app.schemas.solution import (
@@ -672,21 +676,65 @@ def get_analytics(db: Session = Depends(get_db), admin: User = Depends(get_curre
 # 📰 6. PUBLICATIONS CRUD
 # =========================================================================
 
-@router.get("/publications", response_model=List[PublicationResponse])
+@router.get("/publications/filter-options", response_model=PublicationFilterOptionsResponse)
+def get_publication_filter_options(
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin)
+):
+    """Mengambil daftar tahun dan bidang publikasi yang tersedia untuk filter dropdown."""
+    years_q = db.query(Publication.year).filter(Publication.year.isnot(None)).distinct().order_by(Publication.year.desc()).all()
+    years = [y[0] for y in years_q if y[0] is not None]
+
+    try:
+        from app.api.v1.endpoints.table import _load_publications_data
+        _, global_stats = _load_publications_data(db)
+        fields = [f["name"] for f in global_stats.get("fields", []) if f.get("name")]
+    except Exception:
+        fields = []
+
+    return {
+        "years": years,
+        "fields": fields
+    }
+
+
+@router.get("/publications", response_model=Union[PublicationPaginationResponse, List[PublicationResponse]])
 def list_publications(
+    response: Response,
+    search: Optional[str] = Query(None, description="Search query across title, id, author, satker, etc."),
     year: Optional[int] = None,
     source: Optional[str] = None,
     coverage: Optional[str] = None,
     field: Optional[str] = None,
     research_center: Optional[str] = None,
     author: Optional[str] = None,
-    limit: int = Query(200, ge=1, le=100000),
+    page: Optional[int] = Query(None, ge=1, description="Nomor halaman (1-based)"),
+    pageSize: Optional[int] = Query(None, ge=1, le=1000, description="Ukuran halaman"),
+    limit: int = Query(100, ge=1, le=100000),
     offset: int = 0,
+    paginated: bool = Query(False, description="Set True untuk response berformat paginasi"),
     db: Session = Depends(get_db),
     admin: User = Depends(get_current_admin)
 ):
-    """List all publications with optional filters."""
+    """List publications with server-side pagination, search, and filters."""
     query = db.query(Publication)
+
+    if search and search.strip():
+        s = f"%{search.strip()}%"
+        query = query.filter(
+            or_(
+                Publication.title.ilike(s),
+                Publication.publication_id.ilike(s),
+                cast(Publication.brin_author, Text).ilike(s),
+                cast(Publication.research_center, Text).ilike(s),
+                cast(Publication.field, Text).ilike(s),
+                Publication.province.ilike(s),
+                Publication.region.ilike(s),
+                Publication.source.ilike(s),
+                Publication.publication_media.ilike(s),
+            )
+        )
+
     if year:
         query = query.filter(Publication.year == year)
     if source:
@@ -699,7 +747,32 @@ def list_publications(
         query = query.filter(cast(Publication.research_center, Text).ilike(f"%{research_center}%"))
     if author:
         query = query.filter(cast(Publication.brin_author, Text).ilike(f"%{author}%"))
-    return query.order_by(Publication.year.desc().nullslast(), Publication.created_at.desc()).offset(offset).limit(limit).all()
+
+    total = query.count()
+    response.headers["X-Total-Count"] = str(total)
+
+    if page is not None:
+        effective_limit = pageSize or limit
+        effective_offset = (page - 1) * effective_limit
+        current_page = page
+    else:
+        effective_limit = pageSize or limit
+        effective_offset = offset
+        current_page = (offset // effective_limit) + 1 if effective_limit > 0 else 1
+
+    rows = query.order_by(Publication.year.desc().nullslast(), Publication.created_at.desc()).offset(effective_offset).limit(effective_limit).all()
+
+    if paginated or page is not None:
+        total_pages = math.ceil(total / effective_limit) if effective_limit > 0 else 1
+        return {
+            "items": rows,
+            "total": total,
+            "page": current_page,
+            "pageSize": effective_limit,
+            "totalPages": total_pages
+        }
+
+    return rows
 
 
 @router.post("/publications", response_model=PublicationResponse, status_code=status.HTTP_201_CREATED)

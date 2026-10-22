@@ -515,7 +515,7 @@ def get_public_publications(
             for c in r["centers"]:
                 center_counter[c] = center_counter.get(c, 0) + 1
 
-    top_centers = [
+    top_satker = [
         {"name": name, "count": count}
         for name, count in sorted(center_counter.items(), key=lambda x: x[1], reverse=True)[:3]
     ]
@@ -547,8 +547,12 @@ def get_public_publications(
         "count_since_year": count_since_year,
         "count_all_years": count_all_years,
         "yearly_trend": yearly_trend,
-        "top_centers": top_centers,
+        "top_satker": top_satker,
+        "top_centers": top_satker,
+        "total_aspect": global_stats["total_fields"],
+        "total_aspact": global_stats["total_fields"],
         "total_fields": global_stats["total_fields"],
+        "aspect": global_stats["fields"],
         "fields": global_stats["fields"],
         "filter": {
             "year": filter_year,
