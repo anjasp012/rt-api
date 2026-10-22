@@ -106,7 +106,6 @@ class PublicationResponse(PublicationBase):
 
 class HamparanItem(BaseModel):
     id_publication: str
-    publication_id: Optional[str] = None
     is_active: bool
 
 
@@ -120,14 +119,9 @@ class SatkerCountItem(BaseModel):
     count: int
 
 
-class AspectCountItem(BaseModel):
+class FieldCountItem(BaseModel):
     name: str
     count: int
-
-
-# Backward compatibility aliases
-CenterCountItem = SatkerCountItem
-FieldCountItem = AspectCountItem
 
 
 class FilterState(BaseModel):
@@ -145,12 +139,8 @@ class PublicPublicationOverviewResponse(BaseModel):
     count_all_years: int = Field(..., description="Jumlah publikasi seluruh tahun (sesuai filter bidang)")
     yearly_trend: List[YearlyTrendItem] = Field(default_factory=list, description="Jejak publikasi per tahun")
     top_satker: List[SatkerCountItem] = Field(default_factory=list, description="Top 3 pusat riset / satker terbanyak")
-    top_centers: Optional[List[SatkerCountItem]] = Field(default_factory=list, description="Alias top_satker")
-    total_aspect: int = Field(..., description="Total aspek / bidang riset unik")
-    total_aspact: Optional[int] = Field(None, description="Alias typo total_aspect")
-    total_fields: Optional[int] = Field(None, description="Alias total_aspect")
-    aspect: List[AspectCountItem] = Field(default_factory=list, description="Daftar seluruh aspek dan total publikasinya")
-    fields: Optional[List[AspectCountItem]] = Field(default_factory=list, description="Alias aspect")
+    total_fields: int = Field(..., description="Total bidang riset unik")
+    fields: List[FieldCountItem] = Field(default_factory=list, description="Daftar seluruh bidang dan total publikasinya")
     filter: FilterState = Field(..., description="Status filter yang sedang aktif")
     hamparan: List[HamparanItem] = Field(default_factory=list, description="Daftar seluruh titik publikasi dengan status boolean is_active")
 

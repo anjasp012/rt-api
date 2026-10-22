@@ -534,7 +534,6 @@ def get_public_publications(
 
         hamparan.append({
             "id_publication": r["id_publication"],
-            "publication_id": r["id_publication"],
             "is_active": is_active
         })
 
@@ -548,11 +547,7 @@ def get_public_publications(
         "count_all_years": count_all_years,
         "yearly_trend": yearly_trend,
         "top_satker": top_satker,
-        "top_centers": top_satker,
-        "total_aspect": global_stats["total_fields"],
-        "total_aspact": global_stats["total_fields"],
         "total_fields": global_stats["total_fields"],
-        "aspect": global_stats["fields"],
         "fields": global_stats["fields"],
         "filter": {
             "year": filter_year,
