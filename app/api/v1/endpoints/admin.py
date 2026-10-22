@@ -846,28 +846,31 @@ def import_publications(
     if ext not in [".xlsx", ".xls", ".csv"]:
         raise HTTPException(status_code=422, detail="Format file tidak didukung. Harap pilih file .xlsx, .xls, atau .csv")
 
-    file_bytes = file.file.read()
-
     def row_generator():
+        file.file.seek(0)
         if ext == ".csv":
             try:
-                content = file_bytes.decode("utf-8-sig")
-            except UnicodeDecodeError:
-                try:
-                    content = file_bytes.decode("utf-8")
-                except UnicodeDecodeError:
-                    content = file_bytes.decode("latin-1")
-            reader = csv.reader(io.StringIO(content))
-            for r in reader:
-                if any(c is not None and str(c).strip() for c in r):
-                    yield [str(c).strip() if c is not None else "" for c in r]
+                stream = io.TextIOWrapper(file.file, encoding="utf-8-sig", errors="replace")
+                reader = csv.reader(stream)
+                for r in reader:
+                    if any(c is not None and str(c).strip() for c in r):
+                        yield [str(c).strip() if c is not None else "" for c in r]
+            except Exception:
+                file.file.seek(0)
+                stream = io.TextIOWrapper(file.file, encoding="latin-1", errors="replace")
+                reader = csv.reader(stream)
+                for r in reader:
+                    if any(c is not None and str(c).strip() for c in r):
+                        yield [str(c).strip() if c is not None else "" for c in r]
         else:
-            wb = openpyxl.load_workbook(io.BytesIO(file_bytes), read_only=True, data_only=True)
-            ws = wb.active
-            for r in ws.iter_rows(values_only=True):
-                if any(c is not None and str(c).strip() for c in r):
-                    yield [str(c).strip() if c is not None else "" for c in r]
-            wb.close()
+            wb = openpyxl.load_workbook(file.file, read_only=True, data_only=True)
+            try:
+                ws = wb.worksheets[0] if wb.worksheets else wb.active
+                for r in ws.iter_rows(values_only=True):
+                    if any(c is not None and str(c).strip() for c in r):
+                        yield [str(c).strip() if c is not None else "" for c in r]
+            finally:
+                wb.close()
 
     gen = row_generator()
     header_row = next(gen, None)
@@ -975,7 +978,7 @@ def import_publications(
             return [x.strip() for x in s.split(';') if x.strip()]
         return [s]
 
-    BATCH_SIZE = 2000
+    BATCH_SIZE = 1000
     batch_inserts = []
     batch_updates = []
     seen_in_import = set()
