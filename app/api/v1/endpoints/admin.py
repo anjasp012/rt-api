@@ -680,7 +680,7 @@ def list_publications(
     field: Optional[str] = None,
     research_center: Optional[str] = None,
     author: Optional[str] = None,
-    limit: int = Query(200, ge=1, le=1000),
+    limit: int = Query(200, ge=1, le=100000),
     offset: int = 0,
     db: Session = Depends(get_db),
     admin: User = Depends(get_current_admin)
