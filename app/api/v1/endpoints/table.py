@@ -1,4 +1,5 @@
 import uuid
+import time
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session, joinedload
@@ -9,6 +10,7 @@ from app.models.challenge import Challenge, Zone
 from app.models.solution import Solution, Innovation
 from app.models.suggestion import ResearchSuggestion
 from app.models.interaction import ModuleInteractionLog
+from app.models.publication import Publication
 from app.schemas.persona import PersonaResponse
 from app.schemas.challenge import ChallengeResponse, ZoneResponse
 from app.schemas.solution import (
@@ -20,6 +22,7 @@ from app.schemas.solution import (
     InnovationDetailResponse
 )
 from app.schemas.suggestion import SuggestionCreate, SuggestionResponse
+from app.schemas.publication import PublicPublicationOverviewResponse
 from app.core.helpers import build_full_url
 
 router = APIRouter()
@@ -341,3 +344,216 @@ def submit_research_suggestion(payload: SuggestionCreate, db: Session = Depends(
         "persona_ids": [p.id for p in suggestion.personas],
         "challange_ids": [c.id for c in suggestion.challenges]
     }
+
+
+# =========================================================================
+# 📰 4. PUBLIKASI RISET BRIN (PUBLIC OVERVIEW & HAMPARAN)
+# =========================================================================
+
+_PUBLICATIONS_CACHE = {
+    "timestamp": 0,
+    "records": None,
+    "global_stats": None
+}
+
+def invalidate_publications_cache():
+    """Mengosongkan cache in-memory publikasi saat ada mutasi data dari CMS."""
+    _PUBLICATIONS_CACHE["timestamp"] = 0
+    _PUBLICATIONS_CACHE["records"] = None
+    _PUBLICATIONS_CACHE["global_stats"] = None
+
+
+def _load_publications_data(db: Session):
+    """
+    Mengambil data publikasi secara efisien (lightweight tuples) dengan caching in-memory 60 detik.
+    Menghindari overhead ORM penuh untuk performa instan puluhan ribu baris.
+    """
+    now = time.time()
+    if _PUBLICATIONS_CACHE["records"] is not None and (now - _PUBLICATIONS_CACHE["timestamp"] < 60):
+        return _PUBLICATIONS_CACHE["records"], _PUBLICATIONS_CACHE["global_stats"]
+
+    # Ambil field minimal yang dibutuhkan saja
+    rows = db.query(
+        Publication.id,
+        Publication.publication_id,
+        Publication.year,
+        Publication.field,
+        Publication.research_center,
+        Publication.brin_author
+    ).filter(Publication.is_active == True).order_by(
+        Publication.publication_id.asc().nullslast()
+    ).all()
+
+    records = []
+    author_set = set()
+    center_set = set()
+    valid_years = []
+    all_fields_counter = {}
+
+    for r in rows:
+        pid = r[1] or str(r[0])
+        y = r[2] if (r[2] and 1900 < r[2] < 2035) else None
+        fields = [f.strip() for f in Publication._to_list(r[3]) if f.strip() and f.strip() != '-' and f.strip().lower() != 'null']
+        centers = [c.strip() for c in Publication._to_list(r[4]) if c.strip() and c.strip() != '-' and c.strip().lower() not in ('null', 'none')]
+        authors = [a.strip() for a in Publication._to_list(r[5]) if a.strip() and a.strip() != '-' and a.strip().lower() != 'null']
+
+        for a in authors:
+            author_set.add(a)
+        for c in centers:
+            center_set.add(c)
+        if y:
+            valid_years.append(y)
+        for f in fields:
+            all_fields_counter[f] = all_fields_counter.get(f, 0) + 1
+
+        records.append({
+            "id_publication": pid,
+            "year": y,
+            "fields": fields,
+            "fields_lower": [f.lower() for f in fields],
+            "centers": centers,
+        })
+
+    min_yr = min(valid_years) if valid_years else 2022
+    max_yr = max(valid_years) if valid_years else 2025
+
+    sorted_fields = [
+        {"name": name, "count": count}
+        for name, count in sorted(all_fields_counter.items(), key=lambda x: x[1], reverse=True)
+    ]
+
+    global_stats = {
+        "total_publications": len(records),
+        "total_researchers": len(author_set),
+        "total_research_centers": len(center_set),
+        "min_year": min_yr,
+        "max_year": max_yr,
+        "total_fields": len(sorted_fields),
+        "fields": sorted_fields,
+    }
+
+    _PUBLICATIONS_CACHE["timestamp"] = now
+    _PUBLICATIONS_CACHE["records"] = records
+    _PUBLICATIONS_CACHE["global_stats"] = global_stats
+
+    return records, global_stats
+
+
+@router.get(
+    "/publications",
+    response_model=PublicPublicationOverviewResponse,
+    summary="Statistik & Hamparan Publikasi Riset BRIN",
+    description="Endpoint publik untuk layar meja interaktif / web publik. Mengembalikan ringkasan angka sekilas riset BRIN dan hamparan status boolean titik publikasi."
+)
+def get_public_publications(
+    year: Optional[str] = Query(None, description="Filter tahun tertentu, misal 2024 atau ALL"),
+    field: Optional[str] = Query(None, description="Filter bidang riset tertentu, misal 'Energi' atau ALL"),
+    tahun: Optional[str] = Query(None, include_in_schema=False),
+    bidang: Optional[str] = Query(None, include_in_schema=False),
+    db: Session = Depends(get_db)
+):
+    # Support alias parameter Indonesia & clean Query defaults
+    clean_year = year if (year is not None and not hasattr(year, "default")) else None
+    clean_field = field if (field is not None and not hasattr(field, "default")) else None
+    clean_tahun = tahun if (tahun is not None and not hasattr(tahun, "default")) else None
+    clean_bidang = bidang if (bidang is not None and not hasattr(bidang, "default")) else None
+
+    raw_year = clean_year or clean_tahun
+    raw_field = clean_field or clean_bidang
+
+    # Parse filter year
+    filter_year = None
+    if raw_year and str(raw_year).strip().upper() != 'ALL':
+        try:
+            filter_year = int(str(raw_year).strip())
+        except ValueError:
+            pass
+
+    # Parse filter field
+    filter_field = None
+    filter_field_lower = None
+    if raw_field and str(raw_field).strip().upper() != 'ALL':
+        clean_field = str(raw_field).strip()
+        if clean_field:
+            filter_field = clean_field
+            filter_field_lower = clean_field.lower()
+
+    records, global_stats = _load_publications_data(db)
+
+    # 1. Filter subset untuk bidang yang aktif jika ada
+    if filter_field_lower:
+        field_records = [
+            r for r in records
+            if filter_field_lower in r["fields_lower"]
+        ]
+    else:
+        field_records = records
+
+    # 2. Hitung angka patokan 'sejak'
+    since_year = filter_year if filter_year is not None else global_stats["min_year"]
+    count_all_years = len(field_records)
+    count_since_year = sum(1 for r in field_records if r["year"] and r["year"] >= since_year)
+
+    # 3. Hitung jejak tahunan (yearly trend)
+    yearly_counts = {}
+    for r in field_records:
+        if r["year"]:
+            yearly_counts[r["year"]] = yearly_counts.get(r["year"], 0) + 1
+
+    sorted_years = sorted(yearly_counts.keys())
+    chart_years = sorted_years[-8:] if len(sorted_years) > 8 else sorted_years
+    yearly_trend = [{"year": y, "count": yearly_counts.get(y, 0)} for y in chart_years]
+
+    # 4. Hitung Top 3 Pusat Riset
+    center_counter = {}
+    for r in field_records:
+        for c in r["centers"]:
+            center_counter[c] = center_counter.get(c, 0) + 1
+
+    if not center_counter:
+        for r in records:
+            for c in r["centers"]:
+                center_counter[c] = center_counter.get(c, 0) + 1
+
+    top_centers = [
+        {"name": name, "count": count}
+        for name, count in sorted(center_counter.items(), key=lambda x: x[1], reverse=True)[:3]
+    ]
+
+    # 5. Bangun hamparan boolean
+    hamparan = []
+    is_filter_year = filter_year is not None
+    is_filter_field = filter_field_lower is not None
+
+    for r in records:
+        is_active = True
+        if is_filter_year and r["year"] != filter_year:
+            is_active = False
+        if is_filter_field and filter_field_lower not in r["fields_lower"]:
+            is_active = False
+
+        hamparan.append({
+            "id_publication": r["id_publication"],
+            "publication_id": r["id_publication"],
+            "is_active": is_active
+        })
+
+    return {
+        "total_publications": global_stats["total_publications"],
+        "total_researchers": global_stats["total_researchers"],
+        "total_research_centers": global_stats["total_research_centers"],
+        "min_year": global_stats["min_year"],
+        "since_year": since_year,
+        "count_since_year": count_since_year,
+        "count_all_years": count_all_years,
+        "yearly_trend": yearly_trend,
+        "top_centers": top_centers,
+        "total_fields": global_stats["total_fields"],
+        "fields": global_stats["fields"],
+        "filter": {
+            "year": filter_year,
+            "field": filter_field
+        },
+        "hamparan": hamparan
+    }
+

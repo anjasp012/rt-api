@@ -63,6 +63,23 @@ def root():
     }
 
 
+from typing import Optional
+from sqlalchemy.orm import Session
+from fastapi import Depends
+from app.db.session import get_db
+
+@app.get("/publications", summary="Public Publications Overview (Root Alias)")
+def public_publications_root(
+    year: Optional[str] = None,
+    field: Optional[str] = None,
+    tahun: Optional[str] = None,
+    bidang: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    from app.api.v1.endpoints.table import get_public_publications
+    return get_public_publications(year=year, field=field, tahun=tahun, bidang=bidang, db=db)
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)

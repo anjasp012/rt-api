@@ -718,6 +718,11 @@ def create_publication(
         db.add(pub)
         db.commit()
         db.refresh(pub)
+        try:
+            from app.api.v1.endpoints.table import invalidate_publications_cache
+            invalidate_publications_cache()
+        except Exception:
+            pass
         return pub
     except IntegrityError:
         db.rollback()
@@ -1112,6 +1117,12 @@ def import_publications(
     # Flush sisa batch terakhir
     flush_batch()
 
+    try:
+        from app.api.v1.endpoints.table import invalidate_publications_cache
+        invalidate_publications_cache()
+    except Exception:
+        pass
+
     return {
         "success": True,
         "message": f"Import selesai: {imported_count} data baru berhasil diimpor, {updated_count} diperbarui, {skipped_count} dilewati.",
@@ -1134,6 +1145,11 @@ def bulk_delete_publications(
     try:
         deleted_count = db.query(Publication).filter(Publication.id.in_(payload.ids)).delete(synchronize_session=False)
         db.commit()
+        try:
+            from app.api.v1.endpoints.table import invalidate_publications_cache
+            invalidate_publications_cache()
+        except Exception:
+            pass
         return {"message": f"{deleted_count} publications deleted", "deleted_count": deleted_count}
     except Exception as e:
         db.rollback()
@@ -1170,6 +1186,11 @@ def update_publication(
             setattr(pub, key, val)
         db.commit()
         db.refresh(pub)
+        try:
+            from app.api.v1.endpoints.table import invalidate_publications_cache
+            invalidate_publications_cache()
+        except Exception:
+            pass
         return pub
     except IntegrityError:
         db.rollback()
@@ -1187,6 +1208,11 @@ def delete_publication(id: uuid.UUID, db: Session = Depends(get_db), admin: User
     try:
         db.delete(pub)
         db.commit()
+        try:
+            from app.api.v1.endpoints.table import invalidate_publications_cache
+            invalidate_publications_cache()
+        except Exception:
+            pass
         return {"message": "Publication deleted successfully"}
     except Exception as e:
         db.rollback()

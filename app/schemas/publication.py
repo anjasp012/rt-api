@@ -98,3 +98,49 @@ class PublicationResponse(PublicationBase):
     class Config:
         from_attributes = True
         populate_by_name = True
+
+
+# =========================================================================
+# 📊 PUBLIC OVERVIEW & HAMPARAN SCHEMAS
+# =========================================================================
+
+class HamparanItem(BaseModel):
+    id_publication: str
+    publication_id: Optional[str] = None
+    is_active: bool
+
+
+class YearlyTrendItem(BaseModel):
+    year: int
+    count: int
+
+
+class CenterCountItem(BaseModel):
+    name: str
+    count: int
+
+
+class FieldCountItem(BaseModel):
+    name: str
+    count: int
+
+
+class FilterState(BaseModel):
+    year: Optional[int] = None
+    field: Optional[str] = None
+
+
+class PublicPublicationOverviewResponse(BaseModel):
+    total_publications: int = Field(..., description="Total publikasi ilmiah riil di database")
+    total_researchers: int = Field(..., description="Total penulis unik afiliasi BRIN")
+    total_research_centers: int = Field(..., description="Total pusat riset / satker unik terpetakan")
+    min_year: int = Field(..., description="Tahun terawal dari data yang ada")
+    since_year: int = Field(..., description="Tahun patokan aktif")
+    count_since_year: int = Field(..., description="Jumlah publikasi sejak since_year (sesuai filter bidang)")
+    count_all_years: int = Field(..., description="Jumlah publikasi seluruh tahun (sesuai filter bidang)")
+    yearly_trend: List[YearlyTrendItem] = Field(default_factory=list, description="Jejak publikasi per tahun")
+    top_centers: List[CenterCountItem] = Field(default_factory=list, description="Top 3 pusat riset terbanyak")
+    total_fields: int = Field(..., description="Total bidang riset unik")
+    fields: List[FieldCountItem] = Field(default_factory=list, description="Daftar seluruh bidang dan total publikasinya")
+    filter: FilterState = Field(..., description="Status filter yang sedang aktif")
+    hamparan: List[HamparanItem] = Field(default_factory=list, description="Daftar seluruh titik publikasi dengan status boolean is_active")
