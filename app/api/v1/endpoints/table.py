@@ -448,7 +448,6 @@ def _load_publications_data(db: Session):
 def get_public_publications(
     year: Optional[str] = Query(None, description="Filter tahun tertentu, misal 2024 atau ALL"),
     field: Optional[str] = Query(None, description="Filter bidang riset tertentu, misal 'Energi' atau ALL"),
-    include_hamparan: bool = Query(True, description="Sertakan bitstring status 59.000 titik publikasi ('1'=aktif, '0'=nonaktif). Ukuran hanya ~59 KB."),
     tahun: Optional[str] = Query(None, include_in_schema=False),
     bidang: Optional[str] = Query(None, include_in_schema=False),
     db: Session = Depends(get_db)
@@ -458,14 +457,6 @@ def get_public_publications(
     clean_field = field if (field is not None and not hasattr(field, "default")) else None
     clean_tahun = tahun if (tahun is not None and not hasattr(tahun, "default")) else None
     clean_bidang = bidang if (bidang is not None and not hasattr(bidang, "default")) else None
-
-    # Parse include_hamparan
-    clean_include_hamparan = True
-    if include_hamparan is not None and not hasattr(include_hamparan, "default"):
-        if isinstance(include_hamparan, bool):
-            clean_include_hamparan = include_hamparan
-        elif isinstance(include_hamparan, str):
-            clean_include_hamparan = include_hamparan.strip().lower() not in ("false", "0", "no")
 
     raw_year = clean_year or clean_tahun
     raw_field = clean_field or clean_bidang
@@ -532,20 +523,18 @@ def get_public_publications(
     # 5. Bangun hamparan bitstring binary ('1' = aktif, '0' = nonaktif)
     # Super efisien: 59.625 status publikasi hanya berukuran ~59 KB (dibandingkan 3.5 MB jika array objek)
     # Sangat cepat, aman di Swagger UI (/docs) tanpa crash, dan langsung dipetakan oleh HTML5 Canvas
-    hamparan_str = ""
-    if clean_include_hamparan:
-        is_filter_year = filter_year is not None
-        is_filter_field = filter_field_lower is not None
+    is_filter_year = filter_year is not None
+    is_filter_field = filter_field_lower is not None
 
-        bits = []
-        for r in records:
-            if is_filter_year and r["year"] != filter_year:
-                bits.append("0")
-            elif is_filter_field and filter_field_lower not in r["fields_lower"]:
-                bits.append("0")
-            else:
-                bits.append("1")
-        hamparan_str = "".join(bits)
+    bits = []
+    for r in records:
+        if is_filter_year and r["year"] != filter_year:
+            bits.append("0")
+        elif is_filter_field and filter_field_lower not in r["fields_lower"]:
+            bits.append("0")
+        else:
+            bits.append("1")
+    hamparan_str = "".join(bits)
 
     return {
         "total_publications": global_stats["total_publications"],
@@ -563,7 +552,6 @@ def get_public_publications(
             "year": filter_year,
             "field": filter_field
         },
-        "hamparan": hamparan_str,
-        "hamparan_mask": hamparan_str
+        "hamparan": hamparan_str
     }
 

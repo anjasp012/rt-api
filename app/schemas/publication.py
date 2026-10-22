@@ -143,7 +143,6 @@ class PublicPublicationOverviewResponse(BaseModel):
     fields: List[FieldCountItem] = Field(default_factory=list, description="Daftar seluruh bidang dan total publikasinya")
     filter: FilterState = Field(..., description="Status filter yang sedang aktif")
     hamparan: str = Field(default="", description="Bitstring status titik publikasi ('1' = aktif, '0' = nonaktif). Berisi ~59.625 karakter (hanya ~59 KB, super cepat dan aman di Swagger UI)")
-    hamparan_mask: Optional[str] = Field(None, description="Alias bitstring status titik publikasi ('1' / '0')")
 
 
 class PublicationPaginationResponse(BaseModel):
