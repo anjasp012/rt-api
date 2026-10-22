@@ -9,7 +9,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status, UploadFile, File, Form
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import func, desc
+from sqlalchemy import func, desc, cast, Text
 from sqlalchemy.exc import IntegrityError
 from collections import defaultdict
 from datetime import datetime
@@ -676,6 +676,9 @@ def list_publications(
     year: Optional[int] = None,
     source: Optional[str] = None,
     coverage: Optional[str] = None,
+    field: Optional[str] = None,
+    research_center: Optional[str] = None,
+    author: Optional[str] = None,
     limit: int = Query(200, ge=1, le=1000),
     offset: int = 0,
     db: Session = Depends(get_db),
@@ -689,15 +692,13 @@ def list_publications(
         query = query.filter(Publication.source == source)
     if coverage:
         query = query.filter(Publication.coverage == coverage)
+    if field:
+        query = query.filter(cast(Publication.field, Text).ilike(f"%{field}%"))
+    if research_center:
+        query = query.filter(cast(Publication.research_center, Text).ilike(f"%{research_center}%"))
+    if author:
+        query = query.filter(cast(Publication.brin_author, Text).ilike(f"%{author}%"))
     return query.order_by(Publication.year.desc().nullslast(), Publication.created_at.desc()).offset(offset).limit(limit).all()
-
-
-@router.get("/publications/{id}", response_model=PublicationResponse)
-def get_publication(id: uuid.UUID, db: Session = Depends(get_db), admin: User = Depends(get_current_admin)):
-    pub = db.query(Publication).filter(Publication.id == id).first()
-    if not pub:
-        raise HTTPException(status_code=404, detail="Publication not found")
-    return pub
 
 
 @router.post("/publications", response_model=PublicationResponse, status_code=status.HTTP_201_CREATED)
@@ -723,68 +724,6 @@ def create_publication(
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to create publication: {str(e)}")
-
-
-@router.put("/publications/{id}", response_model=PublicationResponse)
-def update_publication(
-    id: uuid.UUID,
-    payload: PublicationUpdate,
-    db: Session = Depends(get_db),
-    admin: User = Depends(get_current_admin)
-):
-    pub = db.query(Publication).filter(Publication.id == id).first()
-    if not pub:
-        raise HTTPException(status_code=404, detail="Publication not found")
-    if payload.publication_id and payload.publication_id != pub.publication_id:
-        existing = db.query(Publication).filter(
-            Publication.publication_id == payload.publication_id,
-            Publication.id != id
-        ).first()
-        if existing:
-            raise HTTPException(status_code=409, detail="publication_id already in use")
-    try:
-        for key, val in payload.model_dump(exclude_unset=True).items():
-            setattr(pub, key, val)
-        db.commit()
-        db.refresh(pub)
-        return pub
-    except IntegrityError:
-        db.rollback()
-        raise HTTPException(status_code=409, detail="publication_id conflict")
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=f"Failed to update publication: {str(e)}")
-
-
-@router.delete("/publications/{id}")
-def delete_publication(id: uuid.UUID, db: Session = Depends(get_db), admin: User = Depends(get_current_admin)):
-    pub = db.query(Publication).filter(Publication.id == id).first()
-    if not pub:
-        raise HTTPException(status_code=404, detail="Publication not found")
-    try:
-        db.delete(pub)
-        db.commit()
-        return {"message": "Publication deleted successfully"}
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=f"Failed to delete publication: {str(e)}")
-
-
-@router.post("/publications/bulk-delete")
-def bulk_delete_publications(
-    payload: BulkDeleteRequest,
-    db: Session = Depends(get_db),
-    admin: User = Depends(get_current_admin)
-):
-    if not payload.ids:
-        raise HTTPException(status_code=422, detail="ID list cannot be empty")
-    try:
-        deleted_count = db.query(Publication).filter(Publication.id.in_(payload.ids)).delete(synchronize_session=False)
-        db.commit()
-        return {"message": f"{deleted_count} publications deleted", "deleted_count": deleted_count}
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=f"Failed to bulk-delete publications: {str(e)}")
 
 
 @router.get("/publications/template")
@@ -1008,9 +947,14 @@ def import_publications(
             coverage = get_val(idx_coverage)
             year = parse_int(get_val(idx_year))
             source = get_val(idx_source)
-            author = get_val(idx_author)
-            center = get_val(idx_center)
-            field = get_val(idx_field)
+            def parse_list(v):
+                if not v:
+                    return []
+                return [x.strip() for x in str(v).split(';') if x.strip()]
+
+            author_list = parse_list(get_val(idx_author))
+            center_list = parse_list(get_val(idx_center))
+            field_list = parse_list(get_val(idx_field))
             prov = get_val(idx_prov)
             region = get_val(idx_region)
             notes = get_val(idx_notes)
@@ -1032,9 +976,9 @@ def import_publications(
                 if coverage is not None: existing.coverage = coverage
                 if year is not None: existing.year = year
                 if source is not None: existing.source = source
-                if author is not None: existing.brin_author = author
-                if center is not None: existing.research_center = center
-                if field is not None: existing.field = field
+                if author_list: existing.brin_author = author_list
+                if center_list: existing.research_center = center_list
+                if field_list: existing.field = field_list
                 if prov is not None: existing.province = prov
                 if region is not None: existing.region = region
                 if notes is not None: existing.data_notes = notes
@@ -1048,9 +992,9 @@ def import_publications(
                     coverage=coverage,
                     year=year,
                     source=source,
-                    brin_author=author,
-                    research_center=center,
-                    field=field,
+                    brin_author=author_list,
+                    research_center=center_list,
+                    field=field_list,
                     province=prov,
                     region=region,
                     data_notes=notes,
@@ -1078,6 +1022,76 @@ def import_publications(
         "skipped": skipped_count,
         "errors": errors
     }
+
+
+@router.post("/publications/bulk-delete")
+def bulk_delete_publications(
+    payload: BulkDeleteRequest,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin)
+):
+    if not payload.ids:
+        raise HTTPException(status_code=422, detail="ID list cannot be empty")
+    try:
+        deleted_count = db.query(Publication).filter(Publication.id.in_(payload.ids)).delete(synchronize_session=False)
+        db.commit()
+        return {"message": f"{deleted_count} publications deleted", "deleted_count": deleted_count}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to bulk-delete publications: {str(e)}")
+
+
+@router.get("/publications/{id}", response_model=PublicationResponse)
+def get_publication(id: uuid.UUID, db: Session = Depends(get_db), admin: User = Depends(get_current_admin)):
+    pub = db.query(Publication).filter(Publication.id == id).first()
+    if not pub:
+        raise HTTPException(status_code=404, detail="Publication not found")
+    return pub
+
+
+@router.put("/publications/{id}", response_model=PublicationResponse)
+def update_publication(
+    id: uuid.UUID,
+    payload: PublicationUpdate,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin)
+):
+    pub = db.query(Publication).filter(Publication.id == id).first()
+    if not pub:
+        raise HTTPException(status_code=404, detail="Publication not found")
+    if payload.publication_id and payload.publication_id != pub.publication_id:
+        existing = db.query(Publication).filter(
+            Publication.publication_id == payload.publication_id,
+            Publication.id != id
+        ).first()
+        if existing:
+            raise HTTPException(status_code=409, detail="publication_id already in use")
+    try:
+        for key, val in payload.model_dump(exclude_unset=True).items():
+            setattr(pub, key, val)
+        db.commit()
+        db.refresh(pub)
+        return pub
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="publication_id conflict")
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to update publication: {str(e)}")
+
+
+@router.delete("/publications/{id}")
+def delete_publication(id: uuid.UUID, db: Session = Depends(get_db), admin: User = Depends(get_current_admin)):
+    pub = db.query(Publication).filter(Publication.id == id).first()
+    if not pub:
+        raise HTTPException(status_code=404, detail="Publication not found")
+    try:
+        db.delete(pub)
+        db.commit()
+        return {"message": "Publication deleted successfully"}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to delete publication: {str(e)}")
 
 
 # =========================================================================
