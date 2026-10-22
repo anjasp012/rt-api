@@ -17,6 +17,7 @@ app = FastAPI(
         "persistAuthorization": True,
         "displayRequestDuration": True,
         "docExpansion": "list",
+        "syntaxHighlight": {"activated": False},
     }
 )
 
@@ -66,7 +67,7 @@ def root():
 
 from typing import Optional
 from sqlalchemy.orm import Session
-from fastapi import Depends
+from fastapi import Depends, Query
 from app.db.session import get_db
 from app.schemas.publication import PublicPublicationOverviewResponse
 
@@ -77,14 +78,15 @@ from app.schemas.publication import PublicPublicationOverviewResponse
     description="Endpoint publik untuk layar meja interaktif / web publik. Mengembalikan ringkasan angka sekilas riset BRIN dan hamparan status boolean titik publikasi."
 )
 def public_publications_root(
-    year: Optional[str] = None,
-    field: Optional[str] = None,
+    year: Optional[str] = Query(None, description="Filter tahun tertentu, misal 2024 atau ALL"),
+    field: Optional[str] = Query(None, description="Filter bidang riset tertentu, misal 'Energi' atau ALL"),
+    include_hamparan: bool = Query(False, description="Sertakan 59.000 titik hamparan boolean (default False agar Swagger UI tidak crash. Set True untuk aplikasi meja/canvas)"),
     tahun: Optional[str] = None,
     bidang: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
     from app.api.v1.endpoints.table import get_public_publications
-    return get_public_publications(year=year, field=field, tahun=tahun, bidang=bidang, db=db)
+    return get_public_publications(year=year, field=field, include_hamparan=include_hamparan, tahun=tahun, bidang=bidang, db=db)
 
 
 if __name__ == "__main__":
