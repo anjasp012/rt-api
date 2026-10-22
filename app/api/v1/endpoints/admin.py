@@ -1,8 +1,13 @@
 import os
 import shutil
 import uuid
+import io
+import csv
+import openpyxl
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query, status, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, Query, status, UploadFile, File, Form
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func, desc
 from sqlalchemy.exc import IntegrityError
@@ -780,6 +785,299 @@ def bulk_delete_publications(
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to bulk-delete publications: {str(e)}")
+
+
+@router.get("/publications/template")
+def download_publication_template(
+    format: str = Query("xlsx", pattern="^(xlsx|csv)$"),
+    admin: User = Depends(get_current_admin)
+):
+    """
+    Menghasilkan file template import publikasi (Excel .xlsx atau CSV)
+    dengan kolom: ID, Judul, Media Publikasi, Cakupan, Tahun, Sumber,
+    Penulis BRIN, Pusat Riset / Satker, Bidang, Provinsi, Wilayah, Catatan data, Dihitung.
+    """
+    headers = [
+        "ID", "Judul", "Media Publikasi", "Cakupan", "Tahun", "Sumber",
+        "Penulis BRIN", "Pusat Riset / Satker", "Bidang", "Provinsi", "Wilayah", "Catatan data", "Dihitung"
+    ]
+    sample_rows = [
+        [
+            "P00001",
+            "1-Dimensional analysis of land subsidence in Semarang city due to anthropogenic forces",
+            "Prosiding",
+            "Global",
+            2021,
+            "Scopus",
+            "Arifan Jaya Syahbana; Dwi Sarah; Eko Soebowo",
+            "Pusat Riset Teknologi Hidrodinamika; Pusat Riset Kebencanaan Geologi",
+            "Bumi, Laut & Kebencanaan; Transportasi & Antariksa",
+            "Jawa Tengah",
+            "Jawa",
+            "",
+            "Ya"
+        ],
+        [
+            "P00002",
+            "1-Ethyl-3-methylimidazolium tolerance and intracellular lipid accumulation of 38 oleaginous yeast species",
+            "Jurnal",
+            "Global",
+            2017,
+            "Scopus",
+            "Sarah Asih Faulina",
+            "",
+            "",
+            "",
+            "",
+            "Satker tidak terpetakan",
+            "Ya"
+        ]
+    ]
+
+    if format == "csv":
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(headers)
+        writer.writerows(sample_rows)
+        output.seek(0)
+        return StreamingResponse(
+            io.BytesIO(output.getvalue().encode("utf-8-sig")),
+            media_type="text/csv",
+            headers={"Content-Disposition": "attachment; filename=template_import_publikasi.csv"}
+        )
+    else:
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Template Publikasi"
+
+        header_fill = PatternFill(start_color="1E293B", end_color="1E293B", fill_type="solid")
+        header_font = Font(name="Segoe UI", size=11, bold=True, color="FFFFFF")
+        border_side = Side(style='thin', color="CBD5E1")
+        border = Border(left=border_side, right=border_side, top=border_side, bottom=border_side)
+
+        ws.append(headers)
+        for col_idx in range(1, len(headers) + 1):
+            cell = ws.cell(row=1, column=col_idx)
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = Alignment(horizontal="center", vertical="center")
+            cell.border = border
+
+        for row in sample_rows:
+            ws.append(row)
+
+        for row_idx in range(2, len(sample_rows) + 2):
+            for col_idx in range(1, len(headers) + 1):
+                cell = ws.cell(row=row_idx, column=col_idx)
+                cell.font = Font(name="Segoe UI", size=10)
+                cell.border = border
+                if col_idx in [1, 4, 5, 6, 13]:
+                    cell.alignment = Alignment(horizontal="center", vertical="center")
+
+        widths = [12, 50, 18, 15, 10, 15, 35, 35, 30, 20, 18, 25, 12]
+        for idx, width in enumerate(widths, 1):
+            ws.column_dimensions[openpyxl.utils.get_column_letter(idx)].width = width
+
+        stream = io.BytesIO()
+        wb.save(stream)
+        stream.seek(0)
+        return StreamingResponse(
+            stream,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": "attachment; filename=template_import_publikasi.xlsx"}
+        )
+
+
+@router.post("/publications/import")
+def import_publications(
+    file: UploadFile = File(...),
+    mode: str = Form("create_or_update"),
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin)
+):
+    """
+    Mengimpor data publikasi dari file spreadsheet Excel (.xlsx / .xls) atau CSV (.csv).
+    Mendukung pemetaan otomatis untuk 13 kolom:
+    ID, Judul, Media Publikasi, Cakupan, Tahun, Sumber, Penulis BRIN, Pusat Riset / Satker,
+    Bidang, Provinsi, Wilayah, Catatan data, Dihitung.
+    """
+    if not file.filename:
+        raise HTTPException(status_code=422, detail="Tidak ada file yang dipilih")
+
+    ext = os.path.splitext(file.filename)[1].lower()
+    if ext not in [".xlsx", ".xls", ".csv"]:
+        raise HTTPException(status_code=422, detail="Format file tidak didukung. Harap pilih file .xlsx, .xls, atau .csv")
+
+    file_bytes = file.file.read()
+    raw_rows = []
+
+    if ext == ".csv":
+        try:
+            content = file_bytes.decode("utf-8-sig")
+        except UnicodeDecodeError:
+            content = file_bytes.decode("latin-1")
+        reader = csv.reader(io.StringIO(content))
+        for row in reader:
+            if any(str(c).strip() for c in row):
+                raw_rows.append(row)
+    else:
+        wb = openpyxl.load_workbook(io.BytesIO(file_bytes), data_only=True)
+        ws = wb.active
+        for row in ws.iter_rows(values_only=True):
+            if any(c is not None and str(c).strip() for c in row):
+                raw_rows.append([str(c) if c is not None else "" for c in row])
+
+    if not raw_rows or len(raw_rows) < 2:
+        return {
+            "success": False,
+            "message": "File kosong atau tidak memiliki baris data setelah header.",
+            "total_rows": 0,
+            "imported": 0,
+            "updated": 0,
+            "skipped": 0,
+            "errors": ["File tidak memuat baris data yang valid."]
+        }
+
+    def norm(h):
+        return str(h).strip().lower().replace("_", " ").replace("-", " ")
+
+    headers = [norm(h) for h in raw_rows[0]]
+
+    def find_col(aliases):
+        for alias in aliases:
+            for idx, h in enumerate(headers):
+                if alias == h or alias in h:
+                    return idx
+        return None
+
+    idx_id = find_col(["id publikasi", "publication id", "id"])
+    idx_title = find_col(["judul", "title", "nama publikasi"])
+    idx_media = find_col(["media publikasi", "media", "publication media", "jenis"])
+    idx_coverage = find_col(["cakupan", "coverage", "scope"])
+    idx_year = find_col(["tahun", "year"])
+    idx_source = find_col(["sumber", "source", "indeks"])
+    idx_author = find_col(["penulis brin", "penulis", "author", "brin author"])
+    idx_center = find_col(["pusat riset / satker", "pusat riset", "satker", "research center"])
+    idx_field = find_col(["bidang", "field", "area"])
+    idx_prov = find_col(["provinsi", "province"])
+    idx_region = find_col(["wilayah", "region"])
+    idx_notes = find_col(["catatan data", "catatan", "notes", "data notes"])
+    idx_counted = find_col(["dihitung", "counted", "is counted"])
+
+    if idx_title is None:
+        raise HTTPException(status_code=422, detail="Kolom 'Judul' / 'Title' wajib ada dalam file spreadsheet.")
+
+    imported_count = 0
+    updated_count = 0
+    skipped_count = 0
+    errors = []
+
+    def parse_bool(v):
+        if not v:
+            return True
+        v_str = str(v).strip().lower()
+        if v_str in ["ya", "true", "1", "y", "yes"]:
+            return True
+        if v_str in ["tidak", "false", "0", "n", "no"]:
+            return False
+        return True
+
+    def parse_int(v):
+        if not v:
+            return None
+        try:
+            return int(float(str(v).strip()))
+        except (ValueError, TypeError):
+            return None
+
+    for r_idx, row in enumerate(raw_rows[1:], start=2):
+        try:
+            def get_val(idx):
+                if idx is not None and idx < len(row):
+                    val = str(row[idx]).strip()
+                    return val if val else None
+                return None
+
+            title = get_val(idx_title)
+            if not title:
+                skipped_count += 1
+                continue
+
+            pub_id = get_val(idx_id)
+            media = get_val(idx_media)
+            coverage = get_val(idx_coverage)
+            year = parse_int(get_val(idx_year))
+            source = get_val(idx_source)
+            author = get_val(idx_author)
+            center = get_val(idx_center)
+            field = get_val(idx_field)
+            prov = get_val(idx_prov)
+            region = get_val(idx_region)
+            notes = get_val(idx_notes)
+            counted = parse_bool(get_val(idx_counted))
+
+            existing = None
+            if pub_id:
+                existing = db.query(Publication).filter(Publication.publication_id == pub_id).first()
+            if not existing and title:
+                existing = db.query(Publication).filter(Publication.title.ilike(title)).first()
+
+            if existing:
+                if mode == "skip_existing":
+                    skipped_count += 1
+                    continue
+                if pub_id: existing.publication_id = pub_id
+                existing.title = title
+                if media is not None: existing.publication_media = media
+                if coverage is not None: existing.coverage = coverage
+                if year is not None: existing.year = year
+                if source is not None: existing.source = source
+                if author is not None: existing.brin_author = author
+                if center is not None: existing.research_center = center
+                if field is not None: existing.field = field
+                if prov is not None: existing.province = prov
+                if region is not None: existing.region = region
+                if notes is not None: existing.data_notes = notes
+                existing.is_counted = counted
+                updated_count += 1
+            else:
+                new_pub = Publication(
+                    publication_id=pub_id,
+                    title=title,
+                    publication_media=media,
+                    coverage=coverage,
+                    year=year,
+                    source=source,
+                    brin_author=author,
+                    research_center=center,
+                    field=field,
+                    province=prov,
+                    region=region,
+                    data_notes=notes,
+                    is_counted=counted,
+                    is_active=True
+                )
+                db.add(new_pub)
+                imported_count += 1
+
+        except Exception as e:
+            errors.append(f"Baris {r_idx}: {str(e)}")
+
+    try:
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Gagal menyimpan data import: {str(e)}")
+
+    return {
+        "success": True,
+        "message": f"Import selesai: {imported_count} data baru, {updated_count} diperbarui, {skipped_count} dilewati.",
+        "total_rows": len(raw_rows) - 1,
+        "imported": imported_count,
+        "updated": updated_count,
+        "skipped": skipped_count,
+        "errors": errors
+    }
 
 
 # =========================================================================
