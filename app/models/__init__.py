@@ -17,6 +17,7 @@ from app.models.suggestion import (
     suggestion_challenges
 )
 from app.models.interaction import ModuleInteractionLog
+from app.models.publication import Publication
 
 __all__ = [
     "Base",
@@ -36,4 +37,5 @@ __all__ = [
     "suggestion_personas",
     "suggestion_challenges",
     "ModuleInteractionLog",
+    "Publication",
 ]

@@ -16,6 +16,8 @@ from app.models.solution import Solution, Innovation
 from app.models.relevance import SolutionPersonaRelevance, InnovationPersonaRelevance
 from app.models.suggestion import ResearchSuggestion
 from app.models.interaction import ModuleInteractionLog
+from app.models.publication import Publication
+from app.schemas.publication import PublicationCreate, PublicationUpdate, PublicationResponse
 from app.schemas.persona import PersonaCreate, PersonaUpdate, PersonaResponse
 from app.schemas.challenge import ChallengeCreate, ChallengeUpdate, ChallengeResponse, ZoneCreate, ZoneUpdate, ZoneResponse
 from app.schemas.solution import (
@@ -661,7 +663,127 @@ def get_analytics(db: Session = Depends(get_db), admin: User = Depends(get_curre
 
 
 # =========================================================================
-# 📁 6. FILE UPLOAD (ICONS, THUMBNAILS, MEDIA)
+# 📰 6. PUBLICATIONS CRUD
+# =========================================================================
+
+@router.get("/publications", response_model=List[PublicationResponse])
+def list_publications(
+    year: Optional[int] = None,
+    source: Optional[str] = None,
+    coverage: Optional[str] = None,
+    limit: int = Query(200, ge=1, le=1000),
+    offset: int = 0,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin)
+):
+    """List all publications with optional filters."""
+    query = db.query(Publication)
+    if year:
+        query = query.filter(Publication.year == year)
+    if source:
+        query = query.filter(Publication.source == source)
+    if coverage:
+        query = query.filter(Publication.coverage == coverage)
+    return query.order_by(Publication.year.desc().nullslast(), Publication.created_at.desc()).offset(offset).limit(limit).all()
+
+
+@router.get("/publications/{id}", response_model=PublicationResponse)
+def get_publication(id: uuid.UUID, db: Session = Depends(get_db), admin: User = Depends(get_current_admin)):
+    pub = db.query(Publication).filter(Publication.id == id).first()
+    if not pub:
+        raise HTTPException(status_code=404, detail="Publication not found")
+    return pub
+
+
+@router.post("/publications", response_model=PublicationResponse, status_code=status.HTTP_201_CREATED)
+def create_publication(
+    payload: PublicationCreate,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin)
+):
+    # Check unique publication_id if provided
+    if payload.publication_id:
+        existing = db.query(Publication).filter(Publication.publication_id == payload.publication_id).first()
+        if existing:
+            raise HTTPException(status_code=409, detail="publication_id already exists")
+    try:
+        pub = Publication(**payload.model_dump())
+        db.add(pub)
+        db.commit()
+        db.refresh(pub)
+        return pub
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="publication_id already exists or data conflict")
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to create publication: {str(e)}")
+
+
+@router.put("/publications/{id}", response_model=PublicationResponse)
+def update_publication(
+    id: uuid.UUID,
+    payload: PublicationUpdate,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin)
+):
+    pub = db.query(Publication).filter(Publication.id == id).first()
+    if not pub:
+        raise HTTPException(status_code=404, detail="Publication not found")
+    if payload.publication_id and payload.publication_id != pub.publication_id:
+        existing = db.query(Publication).filter(
+            Publication.publication_id == payload.publication_id,
+            Publication.id != id
+        ).first()
+        if existing:
+            raise HTTPException(status_code=409, detail="publication_id already in use")
+    try:
+        for key, val in payload.model_dump(exclude_unset=True).items():
+            setattr(pub, key, val)
+        db.commit()
+        db.refresh(pub)
+        return pub
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="publication_id conflict")
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to update publication: {str(e)}")
+
+
+@router.delete("/publications/{id}")
+def delete_publication(id: uuid.UUID, db: Session = Depends(get_db), admin: User = Depends(get_current_admin)):
+    pub = db.query(Publication).filter(Publication.id == id).first()
+    if not pub:
+        raise HTTPException(status_code=404, detail="Publication not found")
+    try:
+        db.delete(pub)
+        db.commit()
+        return {"message": "Publication deleted successfully"}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to delete publication: {str(e)}")
+
+
+@router.post("/publications/bulk-delete")
+def bulk_delete_publications(
+    payload: BulkDeleteRequest,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin)
+):
+    if not payload.ids:
+        raise HTTPException(status_code=422, detail="ID list cannot be empty")
+    try:
+        deleted_count = db.query(Publication).filter(Publication.id.in_(payload.ids)).delete(synchronize_session=False)
+        db.commit()
+        return {"message": f"{deleted_count} publications deleted", "deleted_count": deleted_count}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to bulk-delete publications: {str(e)}")
+
+
+# =========================================================================
+# 📁 7. FILE UPLOAD (ICONS, THUMBNAILS, MEDIA)
 # =========================================================================
 
 @router.post("/upload")

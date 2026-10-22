@@ -21,6 +21,7 @@ from app.schemas.innovation import (
 )
 from app.schemas.suggestion import SuggestionCreate, SuggestionStatusUpdate, SuggestionResponse
 from app.schemas.admin import BulkStatusUpdate, BulkDeleteRequest, DashboardAnalyticsResponse
+from app.schemas.publication import PublicationCreate, PublicationUpdate, PublicationResponse
 
 __all__ = [
     "LoginRequest",
@@ -48,4 +49,7 @@ __all__ = [
     "BulkStatusUpdate",
     "BulkDeleteRequest",
     "DashboardAnalyticsResponse",
+    "PublicationCreate",
+    "PublicationUpdate",
+    "PublicationResponse",
 ]
