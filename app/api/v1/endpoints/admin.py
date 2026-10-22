@@ -3,6 +3,7 @@ import shutil
 import uuid
 import io
 import csv
+import json
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from typing import List, Optional
@@ -835,10 +836,8 @@ def import_publications(
     admin: User = Depends(get_current_admin)
 ):
     """
-    Mengimpor data publikasi dari file spreadsheet Excel (.xlsx / .xls) atau CSV (.csv).
-    Mendukung pemetaan otomatis untuk 13 kolom:
-    ID, Judul, Media Publikasi, Cakupan, Tahun, Sumber, Penulis BRIN, Pusat Riset / Satker,
-    Bidang, Provinsi, Wilayah, Catatan data, Dihitung.
+    Mengimpor data publikasi skala besar (hingga puluhan ribu baris) dari file Excel (.xlsx / .xls) atau CSV (.csv).
+    Menggunakan streaming row generator, pre-fetched lookup O(1), dan batch insert/commit (2.000 baris per batch).
     """
     if not file.filename:
         raise HTTPException(status_code=422, detail="Tidak ada file yang dipilih")
@@ -848,25 +847,32 @@ def import_publications(
         raise HTTPException(status_code=422, detail="Format file tidak didukung. Harap pilih file .xlsx, .xls, atau .csv")
 
     file_bytes = file.file.read()
-    raw_rows = []
 
-    if ext == ".csv":
-        try:
-            content = file_bytes.decode("utf-8-sig")
-        except UnicodeDecodeError:
-            content = file_bytes.decode("latin-1")
-        reader = csv.reader(io.StringIO(content))
-        for row in reader:
-            if any(str(c).strip() for c in row):
-                raw_rows.append(row)
-    else:
-        wb = openpyxl.load_workbook(io.BytesIO(file_bytes), data_only=True)
-        ws = wb.active
-        for row in ws.iter_rows(values_only=True):
-            if any(c is not None and str(c).strip() for c in row):
-                raw_rows.append([str(c) if c is not None else "" for c in row])
+    def row_generator():
+        if ext == ".csv":
+            try:
+                content = file_bytes.decode("utf-8-sig")
+            except UnicodeDecodeError:
+                try:
+                    content = file_bytes.decode("utf-8")
+                except UnicodeDecodeError:
+                    content = file_bytes.decode("latin-1")
+            reader = csv.reader(io.StringIO(content))
+            for r in reader:
+                if any(c is not None and str(c).strip() for c in r):
+                    yield [str(c).strip() if c is not None else "" for c in r]
+        else:
+            wb = openpyxl.load_workbook(io.BytesIO(file_bytes), read_only=True, data_only=True)
+            ws = wb.active
+            for r in ws.iter_rows(values_only=True):
+                if any(c is not None and str(c).strip() for c in r):
+                    yield [str(c).strip() if c is not None else "" for c in r]
+            wb.close()
 
-    if not raw_rows or len(raw_rows) < 2:
+    gen = row_generator()
+    header_row = next(gen, None)
+
+    if not header_row:
         return {
             "success": False,
             "message": "File kosong atau tidak memiliki baris data setelah header.",
@@ -880,39 +886,60 @@ def import_publications(
     def norm(h):
         return str(h).strip().lower().replace("_", " ").replace("-", " ")
 
-    headers = [norm(h) for h in raw_rows[0]]
+    headers = [norm(h) for h in header_row]
 
     def find_col(aliases):
+        # 1. Exact match priority
         for alias in aliases:
             for idx, h in enumerate(headers):
-                if alias == h or alias in h:
+                if alias == h:
+                    return idx
+        # 2. Substring match for aliases > 3 chars (hindari kata pendek seperti 'id' mencocokkan 'bidang')
+        for alias in aliases:
+            if len(alias) <= 3:
+                continue
+            for idx, h in enumerate(headers):
+                if alias in h:
                     return idx
         return None
 
-    idx_id = find_col(["id publikasi", "publication id", "id"])
-    idx_title = find_col(["judul", "title", "nama publikasi"])
-    idx_media = find_col(["media publikasi", "media", "publication media", "jenis"])
-    idx_coverage = find_col(["cakupan", "coverage", "scope"])
+    idx_id = find_col(["id publikasi", "publication id", "id_publikasi", "id", "pub id", "kode publikasi"])
+    idx_title = find_col(["judul", "title", "nama publikasi", "judul publikasi"])
+    idx_media = find_col(["media publikasi", "media", "publication media", "jenis media", "jenis"])
+    idx_coverage = find_col(["cakupan", "coverage", "scope", "tingkat"])
     idx_year = find_col(["tahun", "year"])
-    idx_source = find_col(["sumber", "source", "indeks"])
-    idx_author = find_col(["penulis brin", "penulis", "author", "brin author"])
-    idx_center = find_col(["pusat riset / satker", "pusat riset", "satker", "research center"])
-    idx_field = find_col(["bidang", "field", "area"])
+    idx_source = find_col(["sumber", "source", "indeks", "index"])
+    idx_author = find_col(["penulis brin", "penulis", "author", "brin author", "authors", "nama penulis"])
+    idx_center = find_col(["pusat riset / satker", "pusat riset", "satker", "research center", "unit kerja", "organisasi"])
+    idx_field = find_col(["bidang", "field", "area", "bidang riset", "topik riset"])
     idx_prov = find_col(["provinsi", "province"])
     idx_region = find_col(["wilayah", "region"])
-    idx_notes = find_col(["catatan data", "catatan", "notes", "data notes"])
-    idx_counted = find_col(["dihitung", "counted", "is counted"])
+    idx_notes = find_col(["catatan data", "catatan", "notes", "data notes", "keterangan"])
+    idx_counted = find_col(["dihitung", "counted", "is counted", "status hitung"])
 
     if idx_title is None:
         raise HTTPException(status_code=422, detail="Kolom 'Judul' / 'Title' wajib ada dalam file spreadsheet.")
 
+    # Pre-fetch existing IDs and titles into memory for O(1) lookups without 60,000 DB roundtrips
+    existing_pubs = dict(
+        db.query(Publication.publication_id, Publication.id)
+        .filter(Publication.publication_id.isnot(None))
+        .all()
+    )
+    existing_titles = dict(
+        db.query(func.lower(Publication.title), Publication.id)
+        .filter(Publication.title.isnot(None))
+        .all()
+    )
+
     imported_count = 0
     updated_count = 0
     skipped_count = 0
+    total_processed = 0
     errors = []
 
     def parse_bool(v):
-        if not v:
+        if v is None or v == "":
             return True
         v_str = str(v).strip().lower()
         if v_str in ["ya", "true", "1", "y", "yes"]:
@@ -929,7 +956,66 @@ def import_publications(
         except (ValueError, TypeError):
             return None
 
-    for r_idx, row in enumerate(raw_rows[1:], start=2):
+    def parse_list(v):
+        if not v:
+            return []
+        if isinstance(v, list):
+            return [str(x).strip() for x in v if str(x).strip()]
+        s = str(v).strip()
+        if not s:
+            return []
+        if s.startswith('[') and s.endswith(']'):
+            try:
+                parsed = json.loads(s)
+                if isinstance(parsed, list):
+                    return [str(x).strip() for x in parsed if str(x).strip()]
+            except Exception:
+                pass
+        if ';' in s:
+            return [x.strip() for x in s.split(';') if x.strip()]
+        return [s]
+
+    BATCH_SIZE = 2000
+    batch_inserts = []
+    batch_updates = []
+    seen_in_import = set()
+
+    def flush_batch():
+        nonlocal batch_inserts, batch_updates
+        if batch_inserts:
+            try:
+                db.bulk_insert_mappings(Publication, batch_inserts)
+                db.commit()
+            except Exception as e:
+                db.rollback()
+                for item in batch_inserts:
+                    try:
+                        db.bulk_insert_mappings(Publication, [item])
+                        db.commit()
+                    except Exception as row_err:
+                        db.rollback()
+                        if len(errors) < 50:
+                            errors.append(f"Gagal simpan ID {item.get('publication_id', '-')}: {str(row_err)}")
+            batch_inserts.clear()
+
+        if batch_updates:
+            try:
+                db.bulk_update_mappings(Publication, batch_updates)
+                db.commit()
+            except Exception as e:
+                db.rollback()
+                for item in batch_updates:
+                    try:
+                        db.bulk_update_mappings(Publication, [item])
+                        db.commit()
+                    except Exception as row_err:
+                        db.rollback()
+                        if len(errors) < 50:
+                            errors.append(f"Gagal perbarui ID {item.get('publication_id', '-')}: {str(row_err)}")
+            batch_updates.clear()
+
+    for r_idx, row in enumerate(gen, start=2):
+        total_processed += 1
         try:
             def get_val(idx):
                 if idx is not None and idx < len(row):
@@ -947,11 +1033,6 @@ def import_publications(
             coverage = get_val(idx_coverage)
             year = parse_int(get_val(idx_year))
             source = get_val(idx_source)
-            def parse_list(v):
-                if not v:
-                    return []
-                return [x.strip() for x in str(v).split(';') if x.strip()]
-
             author_list = parse_list(get_val(idx_author))
             center_list = parse_list(get_val(idx_center))
             field_list = parse_list(get_val(idx_field))
@@ -960,63 +1041,78 @@ def import_publications(
             notes = get_val(idx_notes)
             counted = parse_bool(get_val(idx_counted))
 
-            existing = None
-            if pub_id:
-                existing = db.query(Publication).filter(Publication.publication_id == pub_id).first()
-            if not existing and title:
-                existing = db.query(Publication).filter(Publication.title.ilike(title)).first()
+            existing_uuid = None
+            if pub_id and pub_id in existing_pubs:
+                existing_uuid = existing_pubs[pub_id]
+            elif not pub_id and title.lower() in existing_titles:
+                existing_uuid = existing_titles[title.lower()]
 
-            if existing:
+            if existing_uuid:
                 if mode == "skip_existing":
                     skipped_count += 1
                     continue
-                if pub_id: existing.publication_id = pub_id
-                existing.title = title
-                if media is not None: existing.publication_media = media
-                if coverage is not None: existing.coverage = coverage
-                if year is not None: existing.year = year
-                if source is not None: existing.source = source
-                if author_list: existing.brin_author = author_list
-                if center_list: existing.research_center = center_list
-                if field_list: existing.field = field_list
-                if prov is not None: existing.province = prov
-                if region is not None: existing.region = region
-                if notes is not None: existing.data_notes = notes
-                existing.is_counted = counted
+                batch_updates.append({
+                    "id": existing_uuid,
+                    "publication_id": pub_id,
+                    "title": title,
+                    "publication_media": media,
+                    "coverage": coverage,
+                    "year": year,
+                    "source": source,
+                    "brin_author": author_list,
+                    "research_center": center_list,
+                    "field": field_list,
+                    "province": prov,
+                    "region": region,
+                    "data_notes": notes,
+                    "is_counted": counted
+                })
                 updated_count += 1
             else:
-                new_pub = Publication(
-                    publication_id=pub_id,
-                    title=title,
-                    publication_media=media,
-                    coverage=coverage,
-                    year=year,
-                    source=source,
-                    brin_author=author_list,
-                    research_center=center_list,
-                    field=field_list,
-                    province=prov,
-                    region=region,
-                    data_notes=notes,
-                    is_counted=counted,
-                    is_active=True
-                )
-                db.add(new_pub)
+                if pub_id and pub_id in seen_in_import:
+                    skipped_count += 1
+                    continue
+                if pub_id:
+                    seen_in_import.add(pub_id)
+
+                new_uuid = uuid.uuid4()
+                batch_inserts.append({
+                    "id": new_uuid,
+                    "publication_id": pub_id,
+                    "title": title,
+                    "publication_media": media,
+                    "coverage": coverage,
+                    "year": year,
+                    "source": source,
+                    "brin_author": author_list,
+                    "research_center": center_list,
+                    "field": field_list,
+                    "province": prov,
+                    "region": region,
+                    "data_notes": notes,
+                    "is_counted": counted,
+                    "is_active": True
+                })
+                if pub_id:
+                    existing_pubs[pub_id] = new_uuid
+                else:
+                    existing_titles[title.lower()] = new_uuid
                 imported_count += 1
 
-        except Exception as e:
-            errors.append(f"Baris {r_idx}: {str(e)}")
+            if len(batch_inserts) >= BATCH_SIZE or len(batch_updates) >= BATCH_SIZE:
+                flush_batch()
 
-    try:
-        db.commit()
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=f"Gagal menyimpan data import: {str(e)}")
+        except Exception as e:
+            if len(errors) < 50:
+                errors.append(f"Baris {r_idx}: {str(e)}")
+
+    # Flush sisa batch terakhir
+    flush_batch()
 
     return {
         "success": True,
-        "message": f"Import selesai: {imported_count} data baru, {updated_count} diperbarui, {skipped_count} dilewati.",
-        "total_rows": len(raw_rows) - 1,
+        "message": f"Import selesai: {imported_count} data baru berhasil diimpor, {updated_count} diperbarui, {skipped_count} dilewati.",
+        "total_rows": total_processed,
         "imported": imported_count,
         "updated": updated_count,
         "skipped": skipped_count,
