@@ -158,6 +158,7 @@ def _get_explore_cards(
             "introduction": it.introduction,
             "challenge_name": it.challenge_name,
             "persona_name": it.persona_name,
+            "fun_fact": it.fun_fact,
         })
     return cards
 
@@ -206,7 +207,7 @@ def get_solutions(
 ):
     """
     Mengambil daftar kartu solusi riset BRIN berdasarkan kombinasi Slot 1 (Peran) dan Slot 2 (Tantangan).
-    Hanya mengembalikan 6 field utama: id, slug, judul_asli, ringkasan, aspek, tahun.
+    Mengembalikan field utama kartu: id, slug, judul_asli, ringkasan, tahun, media_publikasi, pertanyaan, pengantar, challenge_name, persona_name, dan fun_fact.
     """
     effective_persona = persona_id or (persona_ids[0] if persona_ids else None)
     effective_challenge_id = challenge_id or challange_id or zone_id or (challenge_ids[0] if challenge_ids else None) or (challange_ids[0] if challange_ids else None)
@@ -299,6 +300,7 @@ def get_solution_detail(identifier: str, db: Session = Depends(get_db)):
         "introduction": solution.introduction,
         "challenge_name": solution.challenge_name,
         "persona_name": solution.persona_name,
+        "fun_fact": solution.fun_fact,
         "relevant_challenges": relevant_challenges,
         "personas": personas,
     }
