@@ -22,6 +22,7 @@ from app.schemas.innovation import (
 from app.schemas.suggestion import SuggestionCreate, SuggestionStatusUpdate, SuggestionResponse
 from app.schemas.admin import BulkStatusUpdate, BulkDeleteRequest, DashboardAnalyticsResponse
 from app.schemas.publication import PublicationCreate, PublicationUpdate, PublicationResponse
+from app.schemas.last_change import LastChangeResponse
 
 __all__ = [
     "LoginRequest",
@@ -52,4 +53,5 @@ __all__ = [
     "PublicationCreate",
     "PublicationUpdate",
     "PublicationResponse",
+    "LastChangeResponse",
 ]

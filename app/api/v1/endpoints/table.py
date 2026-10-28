@@ -23,6 +23,7 @@ from app.schemas.solution import (
 )
 from app.schemas.suggestion import SuggestionCreate, SuggestionResponse
 from app.schemas.publication import PublicPublicationOverviewResponse
+from app.schemas.last_change import LastChangeResponse
 from app.core.helpers import build_full_url
 
 router = APIRouter()
@@ -556,4 +557,170 @@ def get_public_publications(
         },
         "hamparan": hamparan_str
     }
+
+
+# =========================================================================
+# 🔄 5. DATA TERAKHIR YANG DIUPDATE (LAST CHANGE)
+# =========================================================================
+
+@router.get(
+    "/last_change",
+    response_model=LastChangeResponse,
+    summary="Waktu & Data Terakhir yang Diupdate",
+    description="Endpoint publik untuk memeriksa kapan data terakhir kali diperbarui di database beserta objek record terakhirnya."
+)
+def get_last_change(
+    table: Optional[str] = Query(None, description="Filter entitas/tabel tertentu: 'solutions', 'publications', 'challenges', 'personas'"),
+    db: Session = Depends(get_db)
+):
+    """
+    Mengambil data terakhir yang diupdate beserta timestamp updated_at.
+    Mendukung pengecekan lintas tabel utama (solutions, publications, challenges, personas)
+    atau spesifik per tabel.
+    """
+    tables_summary = {}
+    candidates = []
+
+    # 1. Tabel Solusi Riset (solutions)
+    latest_sol = db.query(Solution).order_by(
+        Solution.updated_at.desc().nullslast(),
+        Solution.created_at.desc().nullslast()
+    ).first()
+
+    if latest_sol:
+        sol_time = latest_sol.updated_at or latest_sol.created_at
+        sol_data = {
+            "id": str(latest_sol.id),
+            "title": latest_sol.title,
+            "slug": latest_sol.slug,
+            "summary": latest_sol.summary,
+            "aspect": latest_sol.aspect,
+            "writer": latest_sol.writer,
+            "year": latest_sol.year,
+            "research_center": latest_sol.research_center,
+            "publication_media": latest_sol.publication_media,
+            "challenge_name": latest_sol.challenge_name,
+            "persona_name": latest_sol.persona_name,
+            "fun_fact": latest_sol.fun_fact,
+            "is_active": latest_sol.is_active,
+            "created_at": latest_sol.created_at,
+            "updated_at": sol_time
+        }
+        if sol_time:
+            tables_summary["solutions"] = {
+                "updated_at": sol_time,
+                "timestamp": int(sol_time.timestamp()),
+                "latest_id": str(latest_sol.id),
+                "latest_title": latest_sol.title
+            }
+            candidates.append((sol_time, "solutions", sol_data))
+
+    # 2. Tabel Publikasi Riset (publications)
+    latest_pub = db.query(Publication).order_by(
+        Publication.updated_at.desc().nullslast(),
+        Publication.created_at.desc().nullslast()
+    ).first()
+
+    if latest_pub:
+        pub_time = latest_pub.updated_at or latest_pub.created_at
+        pub_data = {
+            "id": str(latest_pub.id),
+            "publication_id": latest_pub.publication_id,
+            "title": latest_pub.title,
+            "year": latest_pub.year,
+            "source": latest_pub.source,
+            "coverage": latest_pub.coverage,
+            "province": latest_pub.province,
+            "region": latest_pub.region,
+            "created_at": latest_pub.created_at,
+            "updated_at": pub_time
+        }
+        if pub_time:
+            tables_summary["publications"] = {
+                "updated_at": pub_time,
+                "timestamp": int(pub_time.timestamp()),
+                "latest_id": str(latest_pub.id),
+                "latest_title": latest_pub.title
+            }
+            candidates.append((pub_time, "publications", pub_data))
+
+    # 3. Tabel Tantangan (challenges)
+    latest_challenge = db.query(Challenge).order_by(Challenge.created_at.desc().nullslast()).first()
+    if latest_challenge and latest_challenge.created_at:
+        ch_time = latest_challenge.created_at
+        ch_data = {
+            "id": str(latest_challenge.id),
+            "name": latest_challenge.name,
+            "slug": latest_challenge.slug,
+            "color": latest_challenge.color,
+            "created_at": ch_time,
+            "updated_at": ch_time
+        }
+        tables_summary["challenges"] = {
+            "updated_at": ch_time,
+            "timestamp": int(ch_time.timestamp()),
+            "latest_id": str(latest_challenge.id),
+            "latest_title": latest_challenge.name
+        }
+        candidates.append((ch_time, "challenges", ch_data))
+
+    # 4. Tabel Peran (personas)
+    latest_persona = db.query(Persona).order_by(Persona.created_at.desc().nullslast()).first()
+    if latest_persona and latest_persona.created_at:
+        pe_time = latest_persona.created_at
+        pe_data = {
+            "id": str(latest_persona.id),
+            "name": latest_persona.name,
+            "slug": latest_persona.slug,
+            "tagline": latest_persona.tagline,
+            "created_at": pe_time,
+            "updated_at": pe_time
+        }
+        tables_summary["personas"] = {
+            "updated_at": pe_time,
+            "timestamp": int(pe_time.timestamp()),
+            "latest_id": str(latest_persona.id),
+            "latest_title": latest_persona.name
+        }
+        candidates.append((pe_time, "personas", pe_data))
+
+    # Jika memfilter tabel tertentu
+    if table and table.strip():
+        target_table = table.strip().lower()
+        matched = [c for c in candidates if c[1] == target_table]
+        if matched:
+            win_time, win_tbl, win_data = matched[0]
+            return {
+                "table": win_tbl,
+                "updated_at": win_time,
+                "timestamp": int(win_time.timestamp()),
+                "data": win_data,
+                "tables": tables_summary
+            }
+        else:
+            raise HTTPException(status_code=404, detail=f"Data untuk tabel '{table}' tidak ditemukan atau belum ada data.")
+
+    # Urutkan berdasarkan timestamp terbaru (descending)
+    candidates.sort(key=lambda x: x[0], reverse=True)
+
+    if candidates:
+        win_time, win_tbl, win_data = candidates[0]
+        return {
+            "table": win_tbl,
+            "updated_at": win_time,
+            "timestamp": int(win_time.timestamp()),
+            "data": win_data,
+            "tables": tables_summary
+        }
+
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc)
+    return {
+        "table": None,
+        "updated_at": now,
+        "timestamp": int(now.timestamp()),
+        "data": None,
+        "tables": {}
+    }
+
 
