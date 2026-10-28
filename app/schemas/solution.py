@@ -145,13 +145,20 @@ class SolutionExploreCard(BaseModel):
     slug: str
     title: str = Field(..., validation_alias=AliasChoices('title', 'judul_asli'))
     summary: Optional[str] = Field(None, validation_alias=AliasChoices('summary', 'ringkasan'))
+    aspect: Optional[str] = Field(None, validation_alias=AliasChoices('aspect', 'aspek'))
+    writer: Optional[str] = Field(None, validation_alias=AliasChoices('writer', 'writter', 'author', 'penulis'))
     year: Optional[int] = Field(None, validation_alias=AliasChoices('year', 'tahun'))
+    research_center: Optional[str] = Field(None, validation_alias=AliasChoices('research_center', 'satker', 'research_unit'))
     publication_media: Optional[str] = Field(None, validation_alias=AliasChoices('publication_media', 'media_publikasi'))
+    abstract_url: Optional[str] = None
+    journal_publication: Optional[str] = Field(None, validation_alias=AliasChoices('journal_publication', 'jurnal_publication'))
     question: Optional[str] = Field(None, validation_alias=AliasChoices('question', 'pertanyaan'))
     introduction: Optional[str] = Field(None, validation_alias=AliasChoices('introduction', 'pengantar'))
     challenge_name: Optional[str] = Field(None, validation_alias=AliasChoices('challenge_name', 'challange_name', 'nama_challenge', 'nama_challange'))
     persona_name: Optional[str] = Field(None, validation_alias=AliasChoices('persona_name', 'nama_persona'))
     fun_fact: Optional[str] = Field(None, validation_alias=AliasChoices('fun_fact', 'tahukah_kamu'))
+    relevant_challenges: List[str] = Field(default_factory=list, validation_alias=AliasChoices('relevant_challenges', 'bidang_relevan', 'relevant_challenge_names'))
+    personas: List[str] = Field(default_factory=list, validation_alias=AliasChoices('personas', 'persona', 'persona_names', 'persona_list'))
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
@@ -162,6 +169,7 @@ class SolutionExploreCard(BaseModel):
 
 class SolutionDetailResponse(BaseModel):
     id: uuid.UUID
+    slug: Optional[str] = None
     title: str = Field(..., validation_alias=AliasChoices('title', 'judul_asli'))
     summary: Optional[str] = Field(None, validation_alias=AliasChoices('summary', 'ringkasan'))
     aspect: Optional[str] = Field(None, validation_alias=AliasChoices('aspect', 'aspek'))

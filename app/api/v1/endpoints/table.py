@@ -139,6 +139,7 @@ def _get_explore_cards(
         joinedload(Solution.challenge),
         joinedload(Solution.relevant_challenges),
         joinedload(Solution.personas),
+        joinedload(Solution.persona),
         joinedload(Solution.persona_relevances)
     ).filter(Solution.is_active == True)
 
@@ -188,6 +189,7 @@ def _get_explore_cards(
             joinedload(Solution.challenge),
             joinedload(Solution.relevant_challenges),
             joinedload(Solution.personas),
+            joinedload(Solution.persona),
             joinedload(Solution.persona_relevances)
         ).filter(
             Solution.is_active == True,
@@ -248,18 +250,33 @@ def _get_explore_cards(
 
     cards = []
     for _, it in scored_items:
+        rel_challenges = [c.name for c in it.relevant_challenges] if it.relevant_challenges else []
+        if not rel_challenges and it.challenge:
+            rel_challenges = [it.challenge.name]
+
+        per_list = [p.name for p in it.personas] if it.personas else []
+        if not per_list and it.persona:
+            per_list = [it.persona.name]
+
         cards.append({
             "id": it.id,
             "slug": it.slug,
             "title": it.title,
             "summary": it.summary,
+            "aspect": it.aspect,
+            "writer": it.writer,
             "year": it.year,
+            "research_center": it.research_center,
             "publication_media": it.publication_media,
+            "abstract_url": it.abstract_url,
+            "journal_publication": it.journal_publication,
             "question": it.question,
             "introduction": it.introduction,
             "challenge_name": it.challenge_name,
             "persona_name": it.persona_name,
             "fun_fact": it.fun_fact,
+            "relevant_challenges": rel_challenges,
+            "personas": per_list,
             "created_at": it.created_at,
             "updated_at": it.updated_at or it.created_at,
         })
@@ -310,7 +327,7 @@ def get_solutions(
 ):
     """
     Mengambil daftar kartu solusi riset BRIN berdasarkan kombinasi Slot 1 (Peran) dan Slot 2 (Tantangan).
-    Mengembalikan field utama kartu: id, slug, judul_asli, ringkasan, tahun, media_publikasi, pertanyaan, pengantar, challenge_name, persona_name, fun_fact, created_at, dan updated_at.
+    Mengembalikan data solusi lengkap: id, slug, title, summary, aspect, writer, year, research_center, publication_media, abstract_url, journal_publication, question, introduction, challenge_name, persona_name, fun_fact, relevant_challenges, personas, created_at, dan updated_at.
     """
     effective_persona = persona_id or (persona_ids[0] if persona_ids else None)
     effective_challenge_id = challenge_id or challange_id or zone_id or (challenge_ids[0] if challenge_ids else None) or (challange_ids[0] if challange_ids else None)
@@ -390,6 +407,7 @@ def get_solution_detail(identifier: str, db: Session = Depends(get_db)):
 
     return {
         "id": solution.id,
+        "slug": solution.slug,
         "title": solution.title,
         "summary": solution.summary,
         "aspect": solution.aspect,
