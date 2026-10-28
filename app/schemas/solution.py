@@ -154,7 +154,9 @@ class SolutionExploreCard(BaseModel):
     journal_publication: Optional[str] = Field(None, validation_alias=AliasChoices('journal_publication', 'jurnal_publication'))
     question: Optional[str] = Field(None, validation_alias=AliasChoices('question', 'pertanyaan'))
     introduction: Optional[str] = Field(None, validation_alias=AliasChoices('introduction', 'pengantar'))
+    challenge_id: Optional[uuid.UUID] = Field(None, validation_alias=AliasChoices('challenge_id', 'challange_id', 'zone_id'))
     challenge_name: Optional[str] = Field(None, validation_alias=AliasChoices('challenge_name', 'challange_name', 'nama_challenge', 'nama_challange'))
+    persona_id: Optional[uuid.UUID] = None
     persona_name: Optional[str] = Field(None, validation_alias=AliasChoices('persona_name', 'nama_persona'))
     fun_fact: Optional[str] = Field(None, validation_alias=AliasChoices('fun_fact', 'tahukah_kamu'))
     relevant_challenges: List[str] = Field(default_factory=list, validation_alias=AliasChoices('relevant_challenges', 'bidang_relevan', 'relevant_challenge_names'))
@@ -181,7 +183,9 @@ class SolutionDetailResponse(BaseModel):
     journal_publication: Optional[str] = Field(None, validation_alias=AliasChoices('journal_publication', 'jurnal_publication'))
     question: Optional[str] = Field(None, validation_alias=AliasChoices('question', 'pertanyaan'))
     introduction: Optional[str] = Field(None, validation_alias=AliasChoices('introduction', 'pengantar'))
+    challenge_id: Optional[uuid.UUID] = Field(None, validation_alias=AliasChoices('challenge_id', 'challange_id', 'zone_id'))
     challenge_name: Optional[str] = Field(None, validation_alias=AliasChoices('challenge_name', 'challange_name', 'nama_challenge', 'nama_challange'))
+    persona_id: Optional[uuid.UUID] = None
     persona_name: Optional[str] = Field(None, validation_alias=AliasChoices('persona_name', 'nama_persona'))
     fun_fact: Optional[str] = Field(None, validation_alias=AliasChoices('fun_fact', 'tahukah_kamu'))
     relevant_challenges: List[str] = Field(default_factory=list, validation_alias=AliasChoices('relevant_challenges', 'bidang_relevan', 'relevant_challenge_names'))
