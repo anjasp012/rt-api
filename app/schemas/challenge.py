@@ -29,6 +29,7 @@ class ChallengeUpdate(BaseModel):
 class ChallengeResponse(ChallengeBase):
     id: uuid.UUID
     created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True

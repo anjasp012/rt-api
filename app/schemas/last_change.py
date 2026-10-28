@@ -5,6 +5,7 @@ from datetime import datetime
 
 class LastChangeResponse(BaseModel):
     table: Optional[str] = Field(None, description="Nama tabel/entitas terakhir yang diupdate (e.g. 'solutions', 'publications')")
+    created_at: Optional[datetime] = Field(None, description="Waktu dibuat (ISO 8601 timestamp)")
     updated_at: Optional[datetime] = Field(None, description="Waktu terakhir data diperbarui (ISO 8601 timestamp)")
     timestamp: Optional[int] = Field(None, description="Waktu terakhir dalam Unix epoch timestamp (detik)")
     data: Optional[Dict[str, Any]] = Field(None, description="Objek data terakhir yang diupdate")

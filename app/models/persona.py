@@ -31,4 +31,8 @@ class Persona(Base):
     def innovations(self):
         return self.solutions
 
+    @property
+    def updated_at(self):
+        return getattr(self, "_updated_at", None) or self.created_at
+
     suggestions = relationship("ResearchSuggestion", secondary="suggestion_personas", back_populates="personas")

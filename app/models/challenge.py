@@ -44,6 +44,10 @@ class Challenge(Base):
     def relevant_innovations(self):
         return self.relevant_solutions
 
+    @property
+    def updated_at(self):
+        return getattr(self, "_updated_at", None) or self.created_at
+
 
 # Alias kelas untuk backward compatibility
 Zone = Challenge

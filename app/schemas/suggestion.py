@@ -40,6 +40,8 @@ class SuggestionResponse(BaseModel):
     deskripsi: Optional[str] = None
     persona_ids: List[uuid.UUID] = []
     challange_ids: List[uuid.UUID] = []
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
@@ -49,6 +51,7 @@ class SuggestionAdminResponse(SuggestionResponse):
     status: Optional[str] = "NEW"
     admin_notes: Optional[str] = None
     created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
     persona_name: Optional[str] = None
     challenge_name: Optional[str] = None
     zone_name: Optional[str] = None

@@ -152,6 +152,8 @@ class SolutionExploreCard(BaseModel):
     challenge_name: Optional[str] = Field(None, validation_alias=AliasChoices('challenge_name', 'challange_name', 'nama_challenge', 'nama_challange'))
     persona_name: Optional[str] = Field(None, validation_alias=AliasChoices('persona_name', 'nama_persona'))
     fun_fact: Optional[str] = Field(None, validation_alias=AliasChoices('fun_fact', 'tahukah_kamu'))
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
@@ -176,6 +178,8 @@ class SolutionDetailResponse(BaseModel):
     fun_fact: Optional[str] = Field(None, validation_alias=AliasChoices('fun_fact', 'tahukah_kamu'))
     relevant_challenges: List[str] = Field(default_factory=list, validation_alias=AliasChoices('relevant_challenges', 'bidang_relevan', 'relevant_challenge_names'))
     personas: List[str] = Field(default_factory=list, validation_alias=AliasChoices('personas', 'persona', 'persona_names', 'persona_list'))
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True

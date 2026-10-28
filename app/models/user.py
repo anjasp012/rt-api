@@ -16,3 +16,7 @@ class User(Base):
     is_active = Column(Integer, default=1, nullable=False)      # 1: active, 0: inactive
     last_login_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    @property
+    def updated_at(self):
+        return getattr(self, "_updated_at", None) or self.created_at

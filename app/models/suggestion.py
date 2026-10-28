@@ -48,6 +48,10 @@ class ResearchSuggestion(Base):
     def challenge_ids(self) -> List[uuid.UUID]:
         return self.challange_ids
 
+    @property
+    def updated_at(self):
+        return getattr(self, "_updated_at", None) or self.created_at
+
     # Compatibility properties for CMS & Admin
     @property
     def topic_wanted(self):

@@ -1,6 +1,6 @@
 import uuid
 import time
-from typing import List, Optional
+from typing import List, Optional, Any, Union
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import or_, func
@@ -8,6 +8,7 @@ from app.db.session import get_db
 from app.models.persona import Persona
 from app.models.challenge import Challenge, Zone
 from app.models.solution import Solution, Innovation
+from app.models.relevance import SolutionPersonaRelevance
 from app.models.suggestion import ResearchSuggestion
 from app.models.interaction import ModuleInteractionLog
 from app.models.publication import Publication
@@ -29,39 +30,97 @@ from app.core.helpers import build_full_url
 router = APIRouter()
 
 
+def _resolve_persona_id(val: Any, slug: Optional[str], db: Session) -> Optional[uuid.UUID]:
+    """Helper untuk meresolve persona dari UUID, slug, atau nama persona."""
+    if isinstance(val, uuid.UUID):
+        return val
+    if val and isinstance(val, str) and val.strip():
+        s = val.strip()
+        try:
+            return uuid.UUID(s)
+        except ValueError:
+            pass
+        p = db.query(Persona.id).filter(
+            or_(
+                Persona.slug == s,
+                Persona.slug == s.lower(),
+                func.lower(Persona.name) == s.lower()
+            )
+        ).first()
+        if p:
+            return p[0]
+            
+    if slug and isinstance(slug, str) and slug.strip():
+        s = slug.strip()
+        try:
+            return uuid.UUID(s)
+        except ValueError:
+            pass
+        p = db.query(Persona.id).filter(
+            or_(
+                Persona.slug == s,
+                Persona.slug == s.lower(),
+                func.lower(Persona.name) == s.lower()
+            )
+        ).first()
+        if p:
+            return p[0]
+    return None
+
+
+def _resolve_challenge_id(val: Any, slug: Optional[str], db: Session) -> Optional[uuid.UUID]:
+    """Helper untuk meresolve challenge/bidang dari UUID, slug, atau nama challenge."""
+    if isinstance(val, uuid.UUID):
+        return val
+    if val and isinstance(val, str) and val.strip():
+        s = val.strip()
+        try:
+            return uuid.UUID(s)
+        except ValueError:
+            pass
+        c = db.query(Challenge.id).filter(
+            or_(
+                Challenge.slug == s,
+                Challenge.slug == s.lower(),
+                func.lower(Challenge.name) == s.lower()
+            )
+        ).first()
+        if c:
+            return c[0]
+            
+    if slug and isinstance(slug, str) and slug.strip():
+        s = slug.strip()
+        try:
+            return uuid.UUID(s)
+        except ValueError:
+            pass
+        c = db.query(Challenge.id).filter(
+            or_(
+                Challenge.slug == s,
+                Challenge.slug == s.lower(),
+                func.lower(Challenge.name) == s.lower()
+            )
+        ).first()
+        if c:
+            return c[0]
+    return None
+
+
 def _get_explore_cards(
     db: Session,
-    persona_id: Optional[uuid.UUID] = None,
+    persona_id: Optional[Any] = None,
     persona_slug: Optional[str] = None,
-    challenge_id: Optional[uuid.UUID] = None,
+    challenge_id: Optional[Any] = None,
     challenge_slug: Optional[str] = None,
     aspect: Optional[str] = None,
     search: Optional[str] = None
 ) -> List[dict]:
     """
     Helper internal untuk mengambil, memfilter, & menghitung skor relevansi solusi riset.
+    Mendukung filter akurat kombinasi Slot 1 (Peran) dan Slot 2 (Tantangan).
     """
-    resolved_persona_id = persona_id if isinstance(persona_id, uuid.UUID) else None
-    if not resolved_persona_id and persona_id and isinstance(persona_id, str):
-        try:
-            resolved_persona_id = uuid.UUID(persona_id.strip())
-        except ValueError:
-            pass
-    if not resolved_persona_id and isinstance(persona_slug, str) and persona_slug.strip():
-        p = db.query(Persona.id).filter(Persona.slug == persona_slug.strip()).first()
-        if p:
-            resolved_persona_id = p[0]
-
-    resolved_challenge_id = challenge_id if isinstance(challenge_id, uuid.UUID) else None
-    if not resolved_challenge_id and challenge_id and isinstance(challenge_id, str):
-        try:
-            resolved_challenge_id = uuid.UUID(challenge_id.strip())
-        except ValueError:
-            pass
-    if not resolved_challenge_id and isinstance(challenge_slug, str) and challenge_slug.strip():
-        c = db.query(Challenge.id).filter(Challenge.slug == challenge_slug.strip()).first()
-        if c:
-            resolved_challenge_id = c[0]
+    resolved_persona_id = _resolve_persona_id(persona_id, persona_slug, db)
+    resolved_challenge_id = _resolve_challenge_id(challenge_id, challenge_slug, db)
 
     # Catat histori interaksi meja sentuh jika peran atau tantangan dipilih
     if resolved_persona_id or resolved_challenge_id:
@@ -83,18 +142,30 @@ def _get_explore_cards(
         joinedload(Solution.persona_relevances)
     ).filter(Solution.is_active == True)
 
-    # Filter berdasarkan Tantangan / Bidang (Utama atau Tantangan Relevan M2M)
+    # 1. Filter berdasarkan Tantangan / Bidang (Utama atau Tantangan Relevan M2M)
     if resolved_challenge_id:
         query = query.filter(
-            (Solution.challenge_id == resolved_challenge_id) |
-            (Solution.relevant_challenges.any(Challenge.id == resolved_challenge_id))
+            or_(
+                Solution.challenge_id == resolved_challenge_id,
+                Solution.relevant_challenges.any(Challenge.id == resolved_challenge_id)
+            )
         )
 
-    # Filter berdasarkan Aspek riset
+    # 2. Filter berdasarkan Peran / Persona (Utama, M2M personas, atau mapping relevansi)
+    if resolved_persona_id:
+        query = query.filter(
+            or_(
+                Solution.persona_id == resolved_persona_id,
+                Solution.personas.any(Persona.id == resolved_persona_id),
+                Solution.persona_relevances.any(SolutionPersonaRelevance.persona_id == resolved_persona_id)
+            )
+        )
+
+    # 3. Filter berdasarkan Aspek riset
     if isinstance(aspect, str) and aspect.strip():
         query = query.filter(Solution.aspect.ilike(f"%{aspect.strip()}%"))
 
-    # Filter pencarian keyword bebas (Judul, Aspek, ID Publikasi, Pertanyaan, Ringkasan, Tahukah Kamu)
+    # 4. Filter pencarian keyword bebas (Judul, Aspek, ID Publikasi, Pertanyaan, Ringkasan, Tahukah Kamu)
     if isinstance(search, str) and search.strip():
         q_term = f"%{search.strip()}%"
         query = query.filter(
@@ -111,6 +182,37 @@ def _get_explore_cards(
 
     solutions = query.limit(200).all()
 
+    # Fallback aman jika kombinasi strict persona & challenge tidak memiliki irisan sama sekali
+    if not solutions and resolved_persona_id and resolved_challenge_id:
+        fallback_query = db.query(Solution).options(
+            joinedload(Solution.challenge),
+            joinedload(Solution.relevant_challenges),
+            joinedload(Solution.personas),
+            joinedload(Solution.persona_relevances)
+        ).filter(
+            Solution.is_active == True,
+            or_(
+                Solution.challenge_id == resolved_challenge_id,
+                Solution.relevant_challenges.any(Challenge.id == resolved_challenge_id)
+            )
+        )
+        if isinstance(aspect, str) and aspect.strip():
+            fallback_query = fallback_query.filter(Solution.aspect.ilike(f"%{aspect.strip()}%"))
+        if isinstance(search, str) and search.strip():
+            q_term = f"%{search.strip()}%"
+            fallback_query = fallback_query.filter(
+                or_(
+                    Solution.title.ilike(q_term),
+                    Solution.aspect.ilike(q_term),
+                    Solution.publication_id.ilike(q_term),
+                    Solution.question.ilike(q_term),
+                    Solution.summary.ilike(q_term),
+                    Solution.fun_fact.ilike(q_term),
+                    Solution.research_center.ilike(q_term)
+                )
+            )
+        solutions = fallback_query.limit(200).all()
+
     scored_items = []
     for item in solutions:
         relevance_score = 0
@@ -126,8 +228,6 @@ def _get_explore_cards(
             rel = next((r for r in item.persona_relevances if r.persona_id == resolved_persona_id), None)
             if rel:
                 relevance_score += rel.relevance_score
-            elif not is_matched_persona:
-                relevance_score += 10
 
         # Jika kedua modul (Peran & Tantangan) cocok dengan solusi ini, berikan bonus sinergi
         if resolved_persona_id and resolved_challenge_id and is_matched_persona:
@@ -160,6 +260,8 @@ def _get_explore_cards(
             "challenge_name": it.challenge_name,
             "persona_name": it.persona_name,
             "fun_fact": it.fun_fact,
+            "created_at": it.created_at,
+            "updated_at": it.updated_at or it.created_at,
         })
     return cards
 
@@ -190,13 +292,13 @@ def get_challenges(db: Session = Depends(get_db)):
 @router.get("/solution", response_model=List[SolutionExploreCard], include_in_schema=False)
 @router.get("/explore", response_model=List[SolutionExploreCard], include_in_schema=False)
 def get_solutions(
-    persona_id: Optional[uuid.UUID] = Query(None, description="ID Peran (Slot 1)"),
+    persona_id: Optional[str] = Query(None, description="ID / Slug / Nama Peran (Slot 1)"),
     persona_slug: Optional[str] = Query(None, description="Slug Peran"),
-    challenge_id: Optional[uuid.UUID] = Query(None, description="ID Tantangan (Slot 2)"),
+    challenge_id: Optional[str] = Query(None, description="ID / Slug / Nama Tantangan (Slot 2)"),
     challenge_slug: Optional[str] = Query(None, description="Slug Tantangan"),
-    challange_id: Optional[uuid.UUID] = Query(None, description="Alias ID Tantangan (Slot 2)"),
+    challange_id: Optional[str] = Query(None, description="Alias ID / Slug / Nama Tantangan (Slot 2)"),
     challange_slug: Optional[str] = Query(None, description="Alias Slug Tantangan"),
-    zone_id: Optional[uuid.UUID] = Query(None, description="Legacy ID Tantangan"),
+    zone_id: Optional[str] = Query(None, description="Legacy ID Tantangan"),
     zone_slug: Optional[str] = Query(None, description="Legacy Slug Tantangan"),
     persona_ids: Optional[List[str]] = Query(None, include_in_schema=False),
     challenge_ids: Optional[List[str]] = Query(None, include_in_schema=False),
@@ -208,7 +310,7 @@ def get_solutions(
 ):
     """
     Mengambil daftar kartu solusi riset BRIN berdasarkan kombinasi Slot 1 (Peran) dan Slot 2 (Tantangan).
-    Mengembalikan field utama kartu: id, slug, judul_asli, ringkasan, tahun, media_publikasi, pertanyaan, pengantar, challenge_name, persona_name, dan fun_fact.
+    Mengembalikan field utama kartu: id, slug, judul_asli, ringkasan, tahun, media_publikasi, pertanyaan, pengantar, challenge_name, persona_name, fun_fact, created_at, dan updated_at.
     """
     effective_persona = persona_id or (persona_ids[0] if persona_ids else None)
     effective_challenge_id = challenge_id or challange_id or zone_id or (challenge_ids[0] if challenge_ids else None) or (challange_ids[0] if challange_ids else None)
@@ -304,6 +406,8 @@ def get_solution_detail(identifier: str, db: Session = Depends(get_db)):
         "fun_fact": solution.fun_fact,
         "relevant_challenges": relevant_challenges,
         "personas": personas,
+        "created_at": solution.created_at,
+        "updated_at": solution.updated_at or solution.created_at,
     }
 
 
@@ -316,7 +420,7 @@ def get_solution_detail(identifier: str, db: Session = Depends(get_db)):
 def submit_research_suggestion(payload: SuggestionCreate, db: Session = Depends(get_db)):
     """
     Pengunjung mengirim usulan topik riset baru melalui layar meja interaktif.
-    Hanya menerima & mengembalikan: title, deskripsi, persona_ids, challange_ids.
+    Hanya menerima & mengembalikan: title, deskripsi, persona_ids, challange_ids, created_at, updated_at.
     """
     if not payload.title or len(payload.title.strip()) == 0:
         raise HTTPException(status_code=422, detail="Title (Judul usulan) wajib diisi")
@@ -345,7 +449,9 @@ def submit_research_suggestion(payload: SuggestionCreate, db: Session = Depends(
         "title": suggestion.title,
         "deskripsi": suggestion.deskripsi,
         "persona_ids": [p.id for p in suggestion.personas],
-        "challange_ids": [c.id for c in suggestion.challenges]
+        "challange_ids": [c.id for c in suggestion.challenges],
+        "created_at": suggestion.created_at,
+        "updated_at": suggestion.updated_at or suggestion.created_at,
     }
 
 
@@ -666,6 +772,7 @@ def get_last_change(
             win_time, win_tbl, win_data = matched[0]
             return {
                 "table": win_tbl,
+                "created_at": win_data.get("created_at") or win_time,
                 "updated_at": win_time,
                 "timestamp": int(win_time.timestamp()),
                 "data": win_data
@@ -680,6 +787,7 @@ def get_last_change(
         win_time, win_tbl, win_data = candidates[0]
         return {
             "table": win_tbl,
+            "created_at": win_data.get("created_at") or win_time,
             "updated_at": win_time,
             "timestamp": int(win_time.timestamp()),
             "data": win_data
@@ -689,6 +797,7 @@ def get_last_change(
     now = datetime.now(timezone.utc)
     return {
         "table": None,
+        "created_at": now,
         "updated_at": now,
         "timestamp": int(now.timestamp()),
         "data": None
