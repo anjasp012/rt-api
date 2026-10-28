@@ -574,11 +574,9 @@ def get_last_change(
     db: Session = Depends(get_db)
 ):
     """
-    Mengambil data terakhir yang diupdate beserta timestamp updated_at.
-    Mendukung pengecekan lintas tabel utama (solutions, publications, challenges, personas)
-    atau spesifik per tabel.
+    Mengambil data yang benar-benar terakhir kali diupdate beserta timestamp updated_at.
+    Hanya mengembalikan 1 objek data yang paling baru di antara entitas sistem.
     """
-    tables_summary = {}
     candidates = []
 
     # 1. Tabel Solusi Riset (solutions)
@@ -589,29 +587,23 @@ def get_last_change(
 
     if latest_sol:
         sol_time = latest_sol.updated_at or latest_sol.created_at
-        sol_data = {
-            "id": str(latest_sol.id),
-            "title": latest_sol.title,
-            "slug": latest_sol.slug,
-            "summary": latest_sol.summary,
-            "aspect": latest_sol.aspect,
-            "writer": latest_sol.writer,
-            "year": latest_sol.year,
-            "research_center": latest_sol.research_center,
-            "publication_media": latest_sol.publication_media,
-            "challenge_name": latest_sol.challenge_name,
-            "persona_name": latest_sol.persona_name,
-            "fun_fact": latest_sol.fun_fact,
-            "is_active": latest_sol.is_active,
-            "created_at": latest_sol.created_at,
-            "updated_at": sol_time
-        }
         if sol_time:
-            tables_summary["solutions"] = {
-                "updated_at": sol_time,
-                "timestamp": int(sol_time.timestamp()),
-                "latest_id": str(latest_sol.id),
-                "latest_title": latest_sol.title
+            sol_data = {
+                "id": str(latest_sol.id),
+                "title": latest_sol.title,
+                "slug": latest_sol.slug,
+                "summary": latest_sol.summary,
+                "aspect": latest_sol.aspect,
+                "writer": latest_sol.writer,
+                "year": latest_sol.year,
+                "research_center": latest_sol.research_center,
+                "publication_media": latest_sol.publication_media,
+                "challenge_name": latest_sol.challenge_name,
+                "persona_name": latest_sol.persona_name,
+                "fun_fact": latest_sol.fun_fact,
+                "is_active": latest_sol.is_active,
+                "created_at": latest_sol.created_at,
+                "updated_at": sol_time
             }
             candidates.append((sol_time, "solutions", sol_data))
 
@@ -623,24 +615,18 @@ def get_last_change(
 
     if latest_pub:
         pub_time = latest_pub.updated_at or latest_pub.created_at
-        pub_data = {
-            "id": str(latest_pub.id),
-            "publication_id": latest_pub.publication_id,
-            "title": latest_pub.title,
-            "year": latest_pub.year,
-            "source": latest_pub.source,
-            "coverage": latest_pub.coverage,
-            "province": latest_pub.province,
-            "region": latest_pub.region,
-            "created_at": latest_pub.created_at,
-            "updated_at": pub_time
-        }
         if pub_time:
-            tables_summary["publications"] = {
-                "updated_at": pub_time,
-                "timestamp": int(pub_time.timestamp()),
-                "latest_id": str(latest_pub.id),
-                "latest_title": latest_pub.title
+            pub_data = {
+                "id": str(latest_pub.id),
+                "publication_id": latest_pub.publication_id,
+                "title": latest_pub.title,
+                "year": latest_pub.year,
+                "source": latest_pub.source,
+                "coverage": latest_pub.coverage,
+                "province": latest_pub.province,
+                "region": latest_pub.region,
+                "created_at": latest_pub.created_at,
+                "updated_at": pub_time
             }
             candidates.append((pub_time, "publications", pub_data))
 
@@ -656,12 +642,6 @@ def get_last_change(
             "created_at": ch_time,
             "updated_at": ch_time
         }
-        tables_summary["challenges"] = {
-            "updated_at": ch_time,
-            "timestamp": int(ch_time.timestamp()),
-            "latest_id": str(latest_challenge.id),
-            "latest_title": latest_challenge.name
-        }
         candidates.append((ch_time, "challenges", ch_data))
 
     # 4. Tabel Peran (personas)
@@ -676,12 +656,6 @@ def get_last_change(
             "created_at": pe_time,
             "updated_at": pe_time
         }
-        tables_summary["personas"] = {
-            "updated_at": pe_time,
-            "timestamp": int(pe_time.timestamp()),
-            "latest_id": str(latest_persona.id),
-            "latest_title": latest_persona.name
-        }
         candidates.append((pe_time, "personas", pe_data))
 
     # Jika memfilter tabel tertentu
@@ -694,13 +668,12 @@ def get_last_change(
                 "table": win_tbl,
                 "updated_at": win_time,
                 "timestamp": int(win_time.timestamp()),
-                "data": win_data,
-                "tables": tables_summary
+                "data": win_data
             }
         else:
             raise HTTPException(status_code=404, detail=f"Data untuk tabel '{table}' tidak ditemukan atau belum ada data.")
 
-    # Urutkan berdasarkan timestamp terbaru (descending)
+    # Urutkan berdasarkan timestamp terbaru (descending) dan ambil yang benar-benar paling baru
     candidates.sort(key=lambda x: x[0], reverse=True)
 
     if candidates:
@@ -709,8 +682,7 @@ def get_last_change(
             "table": win_tbl,
             "updated_at": win_time,
             "timestamp": int(win_time.timestamp()),
-            "data": win_data,
-            "tables": tables_summary
+            "data": win_data
         }
 
     from datetime import datetime, timezone
@@ -719,8 +691,7 @@ def get_last_change(
         "table": None,
         "updated_at": now,
         "timestamp": int(now.timestamp()),
-        "data": None,
-        "tables": {}
+        "data": None
     }
 
 

@@ -8,7 +8,6 @@ class LastChangeResponse(BaseModel):
     updated_at: Optional[datetime] = Field(None, description="Waktu terakhir data diperbarui (ISO 8601 timestamp)")
     timestamp: Optional[int] = Field(None, description="Waktu terakhir dalam Unix epoch timestamp (detik)")
     data: Optional[Dict[str, Any]] = Field(None, description="Objek data terakhir yang diupdate")
-    tables: Optional[Dict[str, Any]] = Field(None, description="Rincian waktu perubahan terakhir per tabel")
 
     class Config:
         from_attributes = True
